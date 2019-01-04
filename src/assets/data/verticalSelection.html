@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    body {
+        font: 10px sans-serif;
+        margin: 0;
+    }
+
+    .line {
+        fill: none;
+        stroke: #666;
+        stroke-width: 1.5px;
+    }
+
+    .area {
+        fill: #e7e7e7;
+    }
+
+    .grid-background {
+        fill: #eee;
+    }
+
+    .grid line,
+    .grid path {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+    }
+
+    .brush .selection  {
+        stroke: #000;
+        fill: red;
+    }
+</style>
+
+<body>
+    <div id="lines"></div>
+    <div id="selects"></div>
+
+    <script src="//d3js.org/d3.v4.min.js"></script>
+    <script src="dtw.js"></script>
+    <script>
+
+        var margin = { top: 0, right: 10, bottom: 0, left: 10 },
+            width = 960 - margin.left - margin.right,
+            height = 69 - margin.top - margin.bottom;
+
+        var parseDate = d3.timeParse("%b %Y");
+
+        var x = d3.scaleTime()
+            .range([0, width]);
+
+        var y = d3.scaleLinear()
+            .range([height, 0]);
+
+        var line = d3.line()
+            .x(function (d) { return x(d.date); })
+            .y(function (d) { return y(d.price); });
+
+        var lineBrushList = [];
+        var lineBrush = d3.brushX();
+
+        d3.csv("stocks.csv", type, function (error, data) {
+            console.log(data);
+            // Nest data by symbol.
+            var symbols = d3.nest()
+                .key(function (d) { return d.symbol; })
+                .entries(data);
+
+            // Compute the maximum price per symbol, needed for the y-domain.
+            symbols.forEach(function (s) {
+                s.maxPrice = d3.max(s.values, function (d) { return d.price; });
+            });
+
+            // Compute the minimum and maximum date across symbols.
+            // We assume values are sorted by date.
+            x.domain([
+                d3.min(symbols, function (s) { return s.values[0].date; }),
+                d3.max(symbols, function (s) { return s.values[s.values.length - 1].date; })
+            ]);
+
+            // Add an SVG element for each symbol, with the desired dimensions and margin.
+            var svg = d3.select("#lines").selectAll("svg")
+                .data(symbols)
+                .enter().append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+
+            // Add the line path elements. Note: the y-domain is set per element.
+            svg.append("path")
+                .attr("class", "line")
+                .attr("d", function (d) { y.domain([0, d.maxPrice]); return line(d.values); });
+
+            // Add a small label for the symbol name.
+            svg.append("text")
+                .attr("x", width - 6)
+                .attr("y", height - 6)
+                .style("text-anchor", "end")
+                .text(function (d) { return d.key; });
+
+            var gBrushes = svg.append('g');
+            gBrushes.attr("class", "lineBrush")
+                .call(lineBrush)
+                .attr("id", function (d, i) {
+                    // console.log(d, i, this);
+                    // newLineBrush(gBrushes, i);
+                    // drawLineBrushes(gBrushes, i);
+                    return "lineBrushes" + i;
+                });
+        });
+
+        function type(d) {
+            d.price = +d.price;
+            d.date = parseDate(d.date);
+            return d;
+        }
+    </script>
+
+
+    <script>
+        var marginb = {
+            top: 0,
+            right: 10,
+            bottom: 0,
+            left: 10
+        },
+            widthb = 960 - marginb.left - marginb.right,
+            heightb = 100 - marginb.top - marginb.bottom;
+
+        var svg = d3.select("#selects").append("svg")
+            .attr("width", widthb + marginb.left + marginb.right)
+            .attr("height", heightb + marginb.top + marginb.bottom)
+            .append("g")
+            .attr("transform", "translate(" + marginb.left + "," + marginb.top + ")");
+
+        svg.append("rect")
+            .attr("class", "grid-background")
+            .attr("width", widthb)
+            .attr("height", heightb);
+
+        var brush = d3.brushX()
+            // .extent([[0, 0], [width, height2]])
+            .on("end", brushed);
+
+        var gBrush = svg.append('g')
+            .attr("class", "brush")
+            .call(brush);
+        // .call(brush.move, x.range());
+
+        function brushed() {
+            var selection = d3.event.selection;
+            //console.log(selection);
+            d3.selectAll(".lineBrush").filter((d,i) => (i === 0)).each(function (brushObject, i) {
+
+                d3.select(this).call(lineBrush.move, selection);
+                console.log(i, d3.brushSelection(this));
+                var sel = d3.brushSelection(this);
+                // console.log(x.domain(sel.map(x.invert, x)));
+                // console.log(x(sel[0]), x(sel[1]), d3.select(this).data());
+                // console.log(sel, x.invert(sel[0]), x.invert(sel[1]));
+                let dataLength = d3.select(this).data()[0].values.length;
+                let start = Math.round(sel[0] / width* dataLength);
+                let end = Math.round(sel[1] / width * dataLength);
+                console.log(start, end);
+
+                calDTW(d3.select(this).data()[0].values, start, end);
+            });
+            // d3.selectAll(".lineBrush").call(brush.move, selection);
+        }
+
+        function calDTW(list, start, end) {
+            let dataPoints = [];
+            dataPoints = list.filter(function(d, i) {
+                return i >= start && i <= end;
+            }).map(d => d.price);
+            console.log("dataPoints =>", dataPoints);
+
+            let comparisonWidth = dataPoints.length + 2;
+            list.filter((d,i) => i < list.length - comparisonWidth).forEach(function (d, i) {
+
+                // var DTW = require('dtw');
+                var dtw = new DTW();
+                let compTargetPoints = dataPoints[i, i + comparisonWidth];
+                                
+                let distance = dtw.compute(dataPoints, compTargetPoints);
+                var path = dtw.path();
+
+                console.log("dist = ", distance);
+                console.log("path", path);
+            });            
+        }
+
+
+    </script>
+</body>

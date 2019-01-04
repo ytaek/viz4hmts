@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    body {
+        font: 10px sans-serif;
+        margin: 0;
+    }
+
+    .line {
+        fill: none;
+        stroke: #666;
+        stroke-width: 1.5px;
+    }
+
+    .area {
+        fill: #e7e7e7;
+    }
+</style>
+
+<body>
+    <div id="lines"></div>
+    <div id="brush"></div>
+
+    <script src="//d3js.org/d3.v4.min.js"></script>
+    <script>
+
+        var margin = { top: 8, right: 10, bottom: 2, left: 10 },
+            width = 960 - margin.left - margin.right,
+            height = 69 - margin.top - margin.bottom;
+
+        var parseDate = d3.timeParse("%b %Y");
+
+        var x = d3.scaleTime()
+            .range([0, width]);
+
+        var y = d3.scaleLinear()
+            .range([height, 0]);
+
+        var line = d3.line()
+            .x(function (d) { return x(d.date); })
+            .y(function (d) { return y(d.price); });
+
+        var lineBrushesList = [];
+
+        d3.csv("stocks.csv", type, function (error, data) {
+            // Nest data by symbol.
+            var symbols = d3.nest()
+                .key(function (d) { return d.symbol; })
+                .entries(data);
+
+            // Compute the maximum price per symbol, needed for the y-domain.
+            symbols.forEach(function (s) {
+                s.maxPrice = d3.max(s.values, function (d) { return d.price; });
+                // init brush list
+                lineBrushesList.push([]);
+            });
+
+            // Compute the minimum and maximum date across symbols.
+            // We assume values are sorted by date.
+            x.domain([
+                d3.min(symbols, function (s) { return s.values[0].date; }),
+                d3.max(symbols, function (s) { return s.values[s.values.length - 1].date; })
+            ]);
+
+            // Add an SVG element for each symbol, with the desired dimensions and margin.
+            var svg = d3.select("#lines").selectAll("svg")
+                .data(symbols)
+                .enter().append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+
+            // Add the line path elements. Note: the y-domain is set per element.
+            svg.append("path")
+                .attr("class", "line")
+                .attr("d", function (d) { y.domain([0, d.maxPrice]); return line(d.values); });
+
+            // Add a small label for the symbol name.
+            svg.append("text")
+                .attr("x", width - 6)
+                .attr("y", height - 6)
+                .style("text-anchor", "end")
+                .text(function (d) { return d.key; });
+
+            var gBrushes = svg.append('g');
+            gBrushes.attr("class", "lineBrush")
+                .attr("id", function (d, i) {
+                    // console.log(d, i, this);
+                    // newLineBrush(gBrushes, i);
+                    // drawLineBrushes(gBrushes, i);
+                    return "lineBrushes" + i;
+                });
+        });
+
+        function type(d) {
+            d.price = +d.price;
+            d.date = parseDate(d.date);
+            return d;
+        }
+
+        function newLineBrush(gBrushes, i) {
+//             var brushes = lineBrushesList[i];
+//             var brush = d3.brushX()
+//                 .on("start", brushstart)
+//                 .on("brush", brushed)
+//                 .on("end", brushend);
+
+//             brushes.push({ id: brushes.length, brush: brush });
+            
+//             function brushstart() {
+//                 console.log("line brush started");
+//                 // your stuff here;
+//             }
+
+//             function brushed() {
+//                 console.log("line brush ed");
+//                 // your stuff here
+//             }
+
+//             function brushend() {
+
+// console.log("line - brushend!!");
+
+//                 // Figure out if our latest brush has a selection
+//                 var lastBrushID = brushes[brushes.length - 1].id;
+//                 var lastBrush = document.getElementById('lineBrush' + i + '-' + lastBrushID);
+//                 var selection = d3.brushSelection(lastBrush);
+
+//                 // If it does, that means we need another one
+//                 if (selection && selection[0] !== selection[1]) {
+//                     newLineBrush(gBrushes, i);
+//                 }
+
+//                 // Always draw brushes
+//                 drawLineBrushes(gBrushes, i);
+//             }
+        }
+
+        function drawLineBrushes(gBrushes, i) {
+            // var brushes = lineBrushesList[i];
+            // // console.log("--", brushes, gBrushes);
+            // var brushSelection = gBrushes
+            //     .selectAll('.brush')
+            //     .data(brushes, function (d) { return d.id });
+            
+            // // console.log("bs = " , brushSelection);
+
+            // var brushSelection2 = d3.selectAll("#lineBrushes" + i)
+            //     .data(brushes, function (d) { return d.id });
+
+            // // console.log("bs2 = " , brushSelection2);
+
+            // // Set up new brushes
+            // brushSelection.enter()
+            //     .insert("g", '.lineBrush')
+            //     .attr('class', 'lineBrush')
+            //     .attr('id', function (brush) { return "lineBrush" + i + "-" + brush.id; })
+            //     .each(function (brushObject) {
+            //         //call the brush
+            //         brushObject.brush(d3.select(this));
+            //     });
+
+            // /* REMOVE POINTER EVENTS ON BRUSH OVERLAYS
+            //  *
+            //  * This part is abbit tricky and requires knowledge of how brushes are implemented.
+            //  * They register pointer events on a .overlay rectangle within them.
+            //  * For existing brushes, make sure we disable their pointer events on their overlay.
+            //  * This frees the overlay for the most current (as of yet with an empty selection) brush to listen for click and drag events
+            //  * The moving and resizing is done with other parts of the brush, so that will still work.
+            //  */
+            // brushSelection
+            //     .each(function (brushObject) {
+            //         d3.select(this)
+            //             .attr('class', 'lineBrush')
+            //             .selectAll('.overlay')
+            //             .style('pointer-events', function () {
+            //                 var brush = brushObject.brush;
+            //                 if (brushObject.id === brushes.length - 1 && brush !== undefined) {
+            //                     return 'all';
+            //                 } else {
+            //                     return 'none';
+            //                 }
+            //             });
+            //     })
+
+            // brushSelection.exit()
+            //     .remove();
+        }
+    </script>
+
+
+
+
+
+    <style>
+        .grid-background {
+            fill: #eee;
+        }
+
+        .grid line,
+        .grid path {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+
+        .brush .selection {
+            stroke: #000;
+            fill: red;
+        }
+    </style>
+
+    <script>
+        var marginb = {
+            top: 10,
+            right: 10,
+            bottom: 10,
+            left: 10
+        },
+            widthb = 960 - marginb.left - marginb.right,
+            heightb = 100 - marginb.top - marginb.bottom;
+
+        var svg = d3.select("#brush").append("svg")
+            .attr("width", widthb + marginb.left + marginb.right)
+            .attr("height", heightb + marginb.top + marginb.bottom)
+            .append("g")
+            .attr("transform", "translate(" + marginb.left + "," + marginb.top + ")");
+
+        svg.append("rect")
+            .attr("class", "grid-background")
+            .attr("width", widthb)
+            .attr("height", heightb);
+
+        // We initially generate a SVG group to keep our brushes' DOM elements in:
+        var gBrushes = svg.append('g')
+            .attr("class", "brushes");
+
+        // We also keep the actual d3-brush functions and their IDs in a list:
+        var brushes = [];
+
+        /* CREATE NEW BRUSH
+         *
+         * This creates a new brush. A brush is both a function (in our array) and a set of predefined DOM elements
+         * Brushes also have selections. While the selection are empty (i.e. a suer hasn't yet dragged)
+         * the brushes are invisible. We will add an initial brush when this viz starts. (see end of file)
+         * Now imagine the user clicked, moved the mouse, and let go. They just gave a selection to the initial brush.
+         * We now want to create a new brush.
+         * However, imagine the user had simply dragged an existing brush--in that case we would not want to create a new one.
+         * We will use the selection of a brush in brushend() to differentiate these cases.
+         */
+        function newBrush() {
+            var brush = d3.brushX()
+                .on("start", brushstart)
+                .on("brush", brushed)
+                .on("end", brushend);
+            
+            var lineBrush = d3.brushX()
+                .on("start", brushstart)
+                .on("brush", brushed)
+                .on("end", brushend);
+
+            brushes.push({ id: brushes.length, brush: brush, lineBrush: lineBrush });
+
+            function brushstart() {
+                // your stuff here;
+            }
+
+            function brushed() {
+                // your stuff here
+            }
+
+            function brushend() {
+                // Figure out if our latest brush has a selection
+                var lastBrushID = brushes[brushes.length - 1].id;
+                var lastBrush = document.getElementById('brush-' + lastBrushID);
+                var selection = d3.brushSelection(lastBrush);
+
+                // If it does, that means we need another one
+                if (selection && selection[0] !== selection[1]) {
+                    newBrush();
+                }
+
+                // Always draw brushes
+                drawBrushes();
+                
+                // dispatch line brush
+                // drawLineBrushes(d3.select("#lineBrushes6"))
+
+                // console.log( d3.select("#lineBrushes6").dispatch);
+                // d3.dispatch.call("end", );
+                
+            }
+        }
+
+        function drawBrushes() {
+            var brushSelection = gBrushes
+                .selectAll('.brush')
+                .data(brushes, function (d) { return d.id });
+
+            brushSelection.enter()
+                .insert("g", '.brush')
+                .attr('class', 'brush')
+                .attr('id', function (brush) { return "brush-" + brush.id; })
+                .each(function (brushObject) {
+                    //call the brush
+// console.log("bo", brushObject);
+
+                    brushObject.brush(d3.select(this));
+console.log("sel", d3.brushSelection(d3.select(this)));
+                });
+
+            brushSelection.exit()
+                .remove();
+            
+
+            var lineBrushSelection = d3.select("#lineBrushes6")
+                .selectAll(".brush")
+                .data(brushes, function (d) { return d.id })
+                .enter()
+                .insert("g", '.brush')
+                .attr('class', 'brush')
+                .attr('id', function (brush) { return "lineBrush-" + brush.id; })
+                .each(function (brushObject, i) {
+                    //call the brush
+console.log(i, d3.select(this), brushObject);
+console.log(d3.brushSelection(this));
+                    brushObject.lineBrush(d3.select(this));
+                });
+// console.log(lineBrushSelection);
+
+
+
+
+            /* REMOVE POINTER EVENTS ON BRUSH OVERLAYS
+             *
+             * This part is abbit tricky and requires knowledge of how brushes are implemented.
+             * They register pointer events on a .overlay rectangle within them.
+             * For existing brushes, make sure we disable their pointer events on their overlay.
+             * This frees the overlay for the most current (as of yet with an empty selection) brush to listen for click and drag events
+             * The moving and resizing is done with other parts of the brush, so that will still work.
+             */
+            brushSelection
+                .each(function (brushObject) {
+                    d3.select(this)
+                        .attr('class', 'lineBrush')
+                        .selectAll('.overlay')
+                        .style('pointer-events', function () {
+                            var brush = brushObject.brush;
+                            if (brushObject.id === brushes.length - 1 && brush !== undefined) {
+                                return 'all';
+                            } else {
+                                return 'none';
+                            }
+                        });
+                })
+            brushSelection.exit()
+                .remove();
+        }
+
+        newBrush();
+        drawBrushes();
+
+    </script>
+</body>

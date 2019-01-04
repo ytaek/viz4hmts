@@ -7,7 +7,7 @@
       "jasmine",
       "node"
     ],
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
   },
   "files": [
     "test.ts",
