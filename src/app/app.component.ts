@@ -5,7 +5,6 @@ import { Http } from '@angular/http';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/observable/of';
 import { DTW } from 'dtw';
-import { ConsoleReporter } from 'jasmine';
 declare var require: any
 
 @Component({
@@ -225,48 +224,85 @@ export class AppComponent implements OnInit, OnDestroy {
         //console.log(searchResultList);
         // calculate matching
 
-        let verticalPatternSet = getVerticalPatternSet(searchResultList);
-        console.log(verticalPatternSet);
+        let verticalPatternSets = getVerticalPatternSet(searchResultList, 20);
+        console.log("verticalPatternSets", verticalPatternSets);
         
-        verticalPatternSet.filter(function (d, i) {
-          return i < 1;
-        }).map((d, i) => drawTop10(d, i));
+        // verticalPatternSets.forEach(elem => (elem.forEach((d, i) => drawPatternSelection(d, i))));
+        // verticalPatternSets.filter((d, i) => (i < 10));
+        let variateCount = verticalPatternSets[0].length;
+        
+        for (let i = 0; i < variateCount; i ++) {
+          drawPatternSelection(verticalPatternSets.map(function(element) {
+            let elem = element[i];
+            elem["rankX"] = elem.startIndex * width / dataLength;
+            elem["rankWidth"] = (elem.endIndex - elem.startIndex) * width / dataLength;
+            return elem;
+          }), i);
+        }
+        
+        function drawPatternSelection(selectionList, i) {
+          console.log("draw", selectionList);
 
-        function drawTop10(rankElement, rank) {
-          console.log(rankElement);
-          let variateCount = rankElement.minList.length;
-          rankElement.minList.map(function (blockList, i) {
-            let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data([blockList]);
-            console.log("blockList = ", blockList);
-            blockList["rankX"] = blockList.startIndex * width / dataLength;
-            blockList["rankWidth"] = (blockList.endIndex - blockList.startIndex) * width / dataLength;
-            // console.log("2 rankS", rankSelection);
+          let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data(selectionList);
+          // console.log("draw => ", rankSelection.selectAll("rankSelection"));
+          // console.log("list = ", list);
+          // console.log("1 rankS", rankSelection);
 
-            rankSelection
-              .enter()
-              .append("rect")
-              .merge(rankSelection)
-              .attr("class", "rankSelection")
-              .attr("fill", "blue")
-              .attr("fill-opacity", "0.3")
-              .attr("stroke", "blue")
-              .attr("x", (d) => (d.rankX))
-              .attr("y", 0)
-              .attr("width", (d) => (d.rankWidth))
-              .attr("height", height);
+          rankSelection
+            .enter()
+            .append("rect")
+            .merge(rankSelection)
+            .attr("class", "rankSelection")
+            .attr("fill", "blue")
+            .attr("fill-opacity", "0.05")
+            .attr("stroke", "blue")
+            .attr("x", (d) => (d.rankX))
+            .attr("y", 0)
+            .attr("width", (d) => (d.rankWidth))
+            .attr("height", height);
 
-            rankSelection.exit().remove();
-          });
+          rankSelection.exit().remove();
+
+          // console.log(rankElement);
+          // let variateCount = rankElement.minList.length;
+          // rankElement.minList.map(function (blockList, i) {
+          //   let blockData = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data([blockList]);
+          //   blockData.push(blockData);
+          //   console.log("blockData", blockData);
+          //   let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection");
+          //   console.log(rankSelection.data());
+          //   // console.log("blockList = ", blockList);
+          //   blockList["rankX"] = blockList.startIndex * width / dataLength;
+          //   blockList["rankWidth"] = (blockList.endIndex - blockList.startIndex) * width / dataLength;
+          //   // console.log("2 rankS", rankSelection);
+
+          //   rankSelection
+          //     .enter()
+          //     .append("rect")
+          //     .merge(rankSelection)
+          //     .attr("class", "rankSelection")
+          //     .attr("fill", "blue")
+          //     .attr("fill-opacity", "0.3")
+          //     .attr("stroke", "blue")
+          //     .attr("x", (d) => (d.rankX))
+          //     .attr("y", 0)
+          //     .attr("width", (d) => (d.rankWidth))
+          //     .attr("height", height);
+
+          //   // rankSelection.exit().remove();
+          // });
         }
 
-        function getVerticalPatternSet(allList) {
-          console.log(allList);
-          let multiVariateDistancesByTimeSlot = allList.map(function(list) {
+        function getVerticalPatternSet(allVariateDistanceList, rankCount) {
+          let timeSlotLength = allVariateDistanceList[0].length;
+
+          console.log("searchResultList", allVariateDistanceList);
+          let variateDistancesByTimeSlot = allVariateDistanceList.map(function(list, i) {
             let totalDistanceByTimeSlot = [];
 
             for (let t = 0; t < list.length; t++) {
               totalDistanceByTimeSlot.push(list.map(function(d, i) {
-                  let w2 = 5;
+                  let w2 = 10;
                   let yDist = w2 * (t - d.startIndex);
                   yDist = yDist * yDist;
                   // if (yDist < 0) yDist *= -1;            
@@ -274,23 +310,67 @@ export class AppComponent implements OnInit, OnDestroy {
 
                   return {distance:distance, xDistance:d.distance, yDistance:yDist
                     ,t:t, startIndex:d.startIndex, endIndex:d.endIndex};
-                }).sort((a, b) => a.distance - b.distance)[0]
+                }).sort((a, b) => a.distance - b.distance)
+                .filter(function(d, i, arr) {
+                  if (i > 0) arr[i].diff = arr[i].distance - arr[i-1].distance;
+                  else arr[i].diff = 0;
+                  return i < rankCount;
+                })
               );
             }
-            
+            // console.log(i, list.length, totalDistanceByTimeSlot);
             return totalDistanceByTimeSlot;
           });
-          console.log(multiVariateDistancesByTimeSlot);
-          let multiVariateDistanceSumByTimeSlot = [];
-          for (let t = 0; t < multiVariateDistancesByTimeSlot[0].length; t++) {
-            multiVariateDistanceSumByTimeSlot.push(multiVariateDistancesByTimeSlot.reduce(function(prev, list) {
-              prev.distanceSum += list[t].distance;
-              prev.minList.push(list[t]);
-              return prev;
-            }, {distanceSum:0, minList:[], t:t}));
+          console.log("variateDistancesByTimeSlot", variateDistancesByTimeSlot);
+
+          let selectionsByTime = [];
+          for (let t = 0; t < timeSlotLength; t++) {
+            let timeList = variateDistancesByTimeSlot.map((d) => d[t]);
+            // console.log("timeList", timeList);
+            let cnt = rankCount - 1;
+            let selectionByRank = [];
+            // init
+            selectionByRank.push(timeList.map(function(d, i, arr) {
+              return d.splice(0, 1)[0];
+            }));
+            // console.log("before", selectionByRank[0]);
+            for (let i = 0; i < cnt; i++) {
+              // get min
+              let itemAndIndex = timeList.map((d) => (d[0])).reduce(function(prev, cur, i) {
+                return prev[0].diff > cur.diff ? [cur, i] : prev;
+              }, [{diff:Number.MAX_VALUE}, -1]);
+              
+              // copy last values as deep copy
+              selectionByRank.push(selectionByRank[i].map(d => d));
+
+              // change as min
+              let minVariateIndex = itemAndIndex[1];
+              selectionByRank[i + 1][minVariateIndex] = timeList[minVariateIndex].splice(0, 1)[0];
+              // console.log("after", selectionByRank);
+            }
+            selectionsByTime.push(selectionByRank);
           }
-          console.log(multiVariateDistanceSumByTimeSlot);
-          return multiVariateDistanceSumByTimeSlot.sort((a, b) => (a.distanceSum - b.distanceSum));
+
+          // console.log(selectionsByTime);
+          
+          let flatSelection = [];
+          selectionsByTime.forEach(function(elem) {
+            flatSelection = flatSelection.concat(elem);
+          });
+
+          return flatSelection.sort(function(a, b) {
+             return a.reduce((prev, cur) => prev + cur, 0) - b.reduce((prev, cur) => prev + cur, 0);
+          }).filter((d, i) => i < rankCount);
+          // let multiVariateDistanceSumByTimeSlot = [];
+          // for (let t = 0; t < timeSlotLength; t++) {
+          //   multiVariateDistanceSumByTimeSlot.push(variateDistancesByTimeSlot.reduce(function(prev, list) {
+          //     prev.distanceSum += list[t].distance;
+          //     prev.minList.push(list[t]);
+          //     return prev;
+          //   }, {distanceSum:0, minList:[], t:t}));
+          // }
+          // console.log("SumByTimeSlot", multiVariateDistanceSumByTimeSlot);
+          // return multiVariateDistanceSumByTimeSlot.sort((a, b) => (a.distanceSum - b.distanceSum));
         }
 
         function calDTW(list, start, end) {
