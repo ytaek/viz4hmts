@@ -3,6 +3,9 @@ import { NgModule } from '@angular/core';
 import { HttpModule } from '@angular/http';
 import { AppComponent } from './app.component';
 import { MainComponent } from './main/main.component';
+import { MatSliderModule } from '@angular/material/slider';
+import { FormsModule } from '@angular/forms';
+import 'hammerjs/hammer';
 
 @NgModule({
   declarations: [
@@ -11,7 +14,9 @@ import { MainComponent } from './main/main.component';
   ],
   imports: [
     HttpModule,
-    BrowserModule
+    BrowserModule,
+    MatSliderModule,
+    FormsModule
   ],
   providers: [],
   bootstrap: [AppComponent]
