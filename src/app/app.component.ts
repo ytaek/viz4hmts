@@ -25,6 +25,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   public w2Value = 2;
   public rankCount = 50;
+  public timeRankResult = [];
   private readonly _internalSubscription = new Subscription();
 
   constructor(private http: Http) {
@@ -107,8 +108,6 @@ export class AppComponent implements OnInit, OnDestroy {
       .append("g")
       .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    // svg.append("g")
-    //   .call(d3.axisRight(y));
 
     // Add the line path elements. Note: the y-domain is set per element.
     svg.append("path")
@@ -126,12 +125,9 @@ export class AppComponent implements OnInit, OnDestroy {
     gBrushes.attr("class", "lineBrush")
       .call(d3.brushX())
       .attr("id", function (d, i) {
-        // console.log(d, i, this);
-        // newLineBrush(gBrushes, i);
-        // drawLineBrushes(gBrushes, i);
         return "lineBrushes" + i;
       });
-
+    
     // rank div
     d3.select("#ranks")
       .selectAll("div")
@@ -163,20 +159,23 @@ export class AppComponent implements OnInit, OnDestroy {
       .attr("width", widthb)
       .attr("height", heightb);
 
-    let _this = this;
+    svg.append("g")
+      .call(d3.axisBottom(x)); 
+
+    let __this = this;
     var brush = d3.brushX()
       // .extent([[0, 0], [width, height2]])
-      .on("end", () => this.brushed(_this));
+      .on("end", () => this.brushed(__this));
 
     var gBrush = svg.append('g')
       .attr("class", "brush")
-      .call(brush);    
+      .call(brush);
   }
 
-  public brushed(_this: any): void {
+  public brushed(__this: any): void {
     // let width = 940;
     var selection = d3.event.selection;
-    _this.calDTW(null, null, null);
+    __this.calDTW(null, null, null);
 
     let searchResultList = [];
     let dataLength = 0;
@@ -199,12 +198,12 @@ export class AppComponent implements OnInit, OnDestroy {
         end = Math.round(sel[1] / width * dataLength);
 
         // console.log(d3.brushSelection(this), dataLength, start, end);
-        let fullResultList = _this.calDTW(d3.select(this).data()[0].values.map(d => d.price), start, end);
+        let fullResultList = __this.calDTW(d3.select(this).data()[0].values.map(d => d.price), start, end);
         let resultList = fullResultList
           .sort((a, b) => (a.distance - b.distance))
           .filter(function(d, i) {
             d.xDistRanking = i;
-            return i < _this.showListSizeAtRightPane;
+            return i < __this.showListSizeAtRightPane;
           }).map(function (d, i) {
             d["rankX"] = d.startIndex * width / dataLength;
             d["rankWidth"] = (d.endIndex - d.startIndex) * width / dataLength;
@@ -233,16 +232,11 @@ export class AppComponent implements OnInit, OnDestroy {
           .on("click", d => drawRankSelection(resultList, i));
 
         let top = resultList[0];
-        // drawRankSelection([top], i);
-        // drawRankSelection(top, i, 0);
         
         searchResultList.push(fullResultList.sort((a, b) => (a.startIndex - b.startIndex)));
 
         function drawRankSelection(list, i) {
           let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data(list)
-          // console.log("draw => ", rankSelection.selectAll("rankSelection"));
-          // console.log("list = ", list);
-          // console.log("1 rankS", rankSelection);
 
           rankSelection
             .enter()
@@ -262,9 +256,7 @@ export class AppComponent implements OnInit, OnDestroy {
       }
     );
     
-    //console.log(searchResultList);
     // calculate matching
-    
     let verticalPatternSets = getVerticalPatternSet(searchResultList, this.rankCount, this.w2Value);
     console.log("verticalPatternSets", verticalPatternSets);
     
@@ -280,14 +272,13 @@ export class AppComponent implements OnInit, OnDestroy {
         return elem;
       }), i);
     }
-    
+
+    __this.timeRankResult = verticalPatternSets.map(d => d[0].t);
+    console.log(__this.timeRankResult);
     function drawPatternSelection(selectionList, i) {
       console.log("draw", i, selectionList);
 
       let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data(selectionList);
-      // console.log("draw => ", rankSelection.selectAll("rankSelection"));
-      // console.log("list = ", list);
-      // console.log("1 rankS", rankSelection);
 
       rankSelection
         .enter()
@@ -378,16 +369,6 @@ export class AppComponent implements OnInit, OnDestroy {
       return flatSelection.sort(function(a, b) {
          return a.reduce((prev, cur) => prev + cur.distance, 0) - b.reduce((prev, cur) => prev + cur.distance, 0);
       }).filter((d, i) => i < rankCount);
-      // let multiVariateDistanceSumByTimeSlot = [];
-      // for (let t = 0; t < timeSlotLength; t++) {
-      //   multiVariateDistanceSumByTimeSlot.push(variateDistancesByTimeSlot.reduce(function(prev, list) {
-      //     prev.distanceSum += list[t].distance;
-      //     prev.minList.push(list[t]);
-      //     return prev;
-      //   }, {distanceSum:0, minList:[], t:t}));
-      // }
-      // console.log("SumByTimeSlot", multiVariateDistanceSumByTimeSlot);
-      // return multiVariateDistanceSumByTimeSlot.sort((a, b) => (a.distanceSum - b.distanceSum));
     }
   }
 

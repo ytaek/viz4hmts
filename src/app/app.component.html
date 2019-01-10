@@ -16,7 +16,7 @@
     </table>
     &nbsp;&nbsp;
     <b>time distance weight: {{w2Value}}</b>
-    <mat-slider thumbLabel min="0" max="10"
+    <mat-slider thumbLabel min="0" max="10" tickInterval="1"
         class="example-margin"
         [(ngModel)]="w2Value" (change)="w2Change($event.value)">
     </mat-slider>
@@ -25,4 +25,5 @@
         class="example-margin"
         [(ngModel)]="rankCount" (change)="rankCountChange($event.value)">
     </mat-slider>
+    &nbsp;&nbsp;{{timeRankResult}}
 </body>
