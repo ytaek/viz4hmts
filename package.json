@@ -29,6 +29,7 @@
     "ng-bootstrap": "^1.6.3",
     "rxjs": "^6.0.0",
     "rxjs-compat": "^6.3.3",
+    "underscore": "^1.9.1",
     "zone.js": "^0.8.26"
   },
   "devDependencies": {

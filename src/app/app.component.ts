@@ -4,9 +4,10 @@ import * as d3 from 'd3';
 import { Http } from '@angular/http';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/observable/of';
+import { _ } from 'underscore';
 import { MatSliderModule } from '@angular/material/slider';
 import { DTW } from 'dtw';
-import { exists } from 'fs';
+//import { exists } from 'fs';
 declare var require: any
 
 @Component({
@@ -23,7 +24,14 @@ export class AppComponent implements OnInit, OnDestroy {
   width = this.maxWidth - this.margin.left - this.margin.right;
   height = 70 - this.margin.top - this.margin.bottom;
   showListSizeAtRightPane = 8;
-  previousSelections;
+  previousSelection;
+  dataRowCount = 0;
+  verticalPatternSets: any;
+  dataLength = 0;
+  focusStartIndex = 0;
+  focusEndIndex = 0;
+  userSelectedAreaStartIndex = 0;
+  userSelectedAreaEndIndex = 0;
 
   public w2Value = 2;
   public rankCount = 50;
@@ -106,7 +114,7 @@ export class AppComponent implements OnInit, OnDestroy {
     var symbols = d3.nest()
       .key(function (d) { return d.symbol; })
       .entries(data);
-
+    
     // Compute the maximum price per symbol, needed for the y-domain.
     symbols.forEach(function (s) {
       s.maxPrice = d3.max(s.values, function (d) { return d.price; });
@@ -115,6 +123,10 @@ export class AppComponent implements OnInit, OnDestroy {
       searchResultList.push(null);
     });
     
+    this.dataRowCount = symbols.length;
+    this.dataLength = symbols[0].values.length;
+    this.focusEndIndex = this.dataLength;
+
     // Compute the minimum and maximum date across symbols.
     // We assume values are sorted by date.
     x.domain([
@@ -206,18 +218,21 @@ export class AppComponent implements OnInit, OnDestroy {
         .attr("dy", ".15em")
         .attr("transform", "rotate(-65)");
 
+    d3.select("#selects").select("svg").append("g").attr("id", "contextTimePoints");
+
     let __this = this;
     var brush = d3.brushX()
       // .extent([[0, 0], [width, height2]])
       .on("end", () => this.brushed(__this));
 
     var gBrush = svg.append('g')
-      .attr("class", "brush")
+      .attr("id", "userSelectionArea")
+      .attr("class", "userSelectionBrush")
       .call(brush);
 
     var fgHeight = height;
     // focusAndContext
-    var fcSvg = d3.select("#selects").append("svg")
+    var fcSvg = d3.select("#focusAndContext").append("svg")
       .attr("width", widthb + marginb.left + marginb.right)
       .attr("height", fgHeight)
       .append("g")
@@ -237,6 +252,10 @@ export class AppComponent implements OnInit, OnDestroy {
         .attr("dx", "-.8em")
         .attr("dy", ".15em")
         .attr("transform", "rotate(-65)");
+
+    // add time points g
+    d3.select("#focusAndContext").select("svg").append("g").attr("id", "timePoints");
+    d3.select("#focusAndContext").select("svg").append("g").attr("id", "userSelectedArea");
 
     var fgBrush = d3.brushX()
       .extent([[0, 0], [width, fgHeight]])
@@ -259,10 +278,11 @@ export class AppComponent implements OnInit, OnDestroy {
     let fx = d3.scaleLinear().range([0, width]);
     let fy = d3.scaleLinear().range([height, 0]);
     let svgs = d3.select("#lines").selectAll("svg");
-    
+    __this.focusX = fx;
+
     console.log(d3.event.selection, fx.domain(), "width = ", width);
 
-    let dataLength = svgs.data()[0].values.length;
+    let dataLength = __this.dataLength;
     let start = Math.round(d3.event.selection[0] / width * dataLength);
     let end = Math.round(d3.event.selection[1] / width * dataLength) - 1;
     console.log("start, end", start, end)
@@ -270,9 +290,10 @@ export class AppComponent implements OnInit, OnDestroy {
     // fx.domain([0, 1013]);
     // fx.domain(d3.event.selection)
 
+    // REDRAW CONTEXT
     let fline = d3.line()
-    .x(function (d) { return fx(d.date); })
-    .y(function (d) { return fy(d.price); });
+      .x(function (d) { return fx(d.date); })
+      .y(function (d) { return fy(d.price); });
 
     svgs.each(function () {
       // d3.select(this).select("path").remove();
@@ -286,25 +307,79 @@ export class AppComponent implements OnInit, OnDestroy {
         // .attr("transform", "translate(10, 0)")
     });
 
-    // console.log(d3.select("#selectsXAxis").select("g"))
-    d3.select("#selectsXAxis")
-      .call(d3.axisBottom(fx).tickFormat(d3.format("")).ticks(30).tickSize(6, 0))
-    // console.log("FGBrush", d3.event);
+    // IF SearchedPattern exists.
+    if (__this.previousSelection !== undefined) {
+      // REDRAW SELECTION AXIS
+      d3.select("#selectsXAxis")
+        .call(d3.axisBottom(fx).tickFormat(d3.format("")).ticks(30).tickSize(6, 0))
+      ;
+      // REDRAW SELECTIONS
+      __this.drawSearchedPatterns();
 
-    __this.focusX = fx;
+      // Move selections
+      console.log(__this.previousSelection, __this.previousSelection.map(d=>fx(d)));
+      d3.select("#userSelectionArea").select(".selection")
+        .attr("x", fx(__this.previousSelection[0]))
+        .attr("width", fx(__this.previousSelection[1]) - fx(__this.previousSelection[0]))
+      ;
+      d3.selectAll(".lineBrush")
+        .each(function (brushObject, i) {
+          d3.select(this).call(d3.brushX().move, __this.previousSelection.map(d=>fx(d)));
+        });
+    }
+  }
+
+
+
+
+  
+  public drawSearchedPatterns() {
+    let verticalPatternSets = this.verticalPatternSets;
+    let fx = this.focusX;
+
+    for (let i = 0; i < this.dataRowCount; i ++) {
+      let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data(verticalPatternSets[i]);
+      rankSelection
+        .enter()
+        .append("rect")
+        .merge(rankSelection)
+        .attr("class", "rankSelection")
+        .attr("fill", "pink")
+        .attr("fill-opacity", "0.05")
+        .attr("stroke", "pink")
+        .attr("x", function(d) {
+          d.rankX = fx(d.startIndex);
+          return d.rankX;
+        })
+        .attr("y", 0)
+        .attr("width", function(d) {
+          d.rankWidth = fx(d.endIndex) - fx(d.startIndex);
+          return d.rankWidth;
+        })
+        .attr("height", this.height);
+  
+      rankSelection.exit().remove();
+    }
+
+    let uniqScreenContextTimePoints = _.uniq(verticalPatternSets.map(d => fx(d[0].t)));
+    console.log(uniqScreenContextTimePoints);
+    // draw search result on context axis
+    let contextTimePoints = d3.select("#contextTimePoints").selectAll("line").data(uniqScreenContextTimePoints);
+    contextTimePoints
+      .enter()
+      .append("line")
+      .merge(contextTimePoints)
+      .attr("x1", (d) => (d))
+      .attr("x2", (d) => (d))
+      .attr("y1", this.height)
+      .attr("y2", 0)
+      .attr("stroke-width", 1)
+      .attr("stroke", "red")
+    ;
+    contextTimePoints.exit().remove();
   }
 
   public brushed(__this: any): void {
-    // let width = 940;
-    console.log(d3.event);
-    var selection;
-    if (d3.event == null) selection = __this.previousSelections;
-    else selection = d3.event.selection;
-    __this.previousSelections = selection;
-
-    console.log("sel = ", selection);
-    __this.calDTW(null, null, null);
-
     let searchResultList = [];
     let dataLength = 0;
     let start = 0;
@@ -314,23 +389,28 @@ export class AppComponent implements OnInit, OnDestroy {
     let height = this.height;
 
     let fx = __this.focusX;
-    start = Math.round(fx.invert(selection[0]));
-    end = Math.round(fx.invert(selection[1]));
-    console.log(start, end);
+    let x = __this.x;
+
+    // let width = 940;
+    console.log(d3.event);
+    let screenSelection;
+    if (d3.event == null) screenSelection = __this.previousSelection;
+    else screenSelection = d3.event.selection;
+
+    console.log("sel = ", screenSelection);
+    __this.calDTW(null, null, null);
+
+    start = Math.round(fx.invert(screenSelection[0]));
+    end = Math.round(fx.invert(screenSelection[1]));
+    __this.previousSelection = [start, end];
 
     ///////////////////////////////////
     // for all line charts
     d3.selectAll(".lineBrush")
       // .filter((d, i) => (i === 0))
       .each(function (brushObject, i) {
-        d3.select(this).call(d3.brushX().move, selection);
+        d3.select(this).call(d3.brushX().move, screenSelection);
         
-        var sel = d3.brushSelection(this);
-        dataLength = d3.select(this).data()[0].values.length;
-        // start = Math.round(sel[0] / width * dataLength);
-        // end = Math.round(sel[1] / width * dataLength);
-
-        // console.log(d3.brushSelection(this), dataLength, start, end);
         let fullResultList = __this.calDTW(d3.select(this).data()[0].values.map(d => d.price), start, end);
         let resultList = fullResultList
           .sort((a, b) => (a.distance - b.distance))
@@ -338,8 +418,8 @@ export class AppComponent implements OnInit, OnDestroy {
             d.yDistRanking = i;
             return i < __this.showListSizeAtRightPane;
           }).map(function (d, i) {
-            d["rankX"] = d.startIndex * width / dataLength;
-            d["rankWidth"] = (d.endIndex - d.startIndex) * width / dataLength;
+            d["rankX"] = fx(d.startIndex);
+            d["rankWidth"] = fx(d.endIndex - d.startIndex);
             return d;
         });
         let rankDiv = d3.select("#rank" + i).selectAll(".rankDiv").data(resultList);
@@ -364,8 +444,6 @@ export class AppComponent implements OnInit, OnDestroy {
           .text("[ALL]")
           .on("click", d => drawRankSelection(resultList, i));
 
-        
-        
         searchResultList.push(fullResultList.sort((a, b) => (a.startIndex - b.startIndex)));
 
         function drawRankSelection(list, i) {
@@ -391,45 +469,46 @@ export class AppComponent implements OnInit, OnDestroy {
     
     // calculate matching
     let verticalPatternSets = getVerticalPatternSet(searchResultList, this.rankCount, this.w2Value);
+    __this.verticalPatternSets = verticalPatternSets;
+
     console.log("verticalPatternSets", verticalPatternSets);
     
-    // verticalPatternSets.forEach(elem => (elem.forEach((d, i) => drawPatternSelection(d, i))));
-    // verticalPatternSets.filter((d, i) => (i < 10));
-    let variateCount = verticalPatternSets[0].length;
+    // draw search results, user selections in global axis
+    let uniqScreenTimePoints = _.uniq(verticalPatternSets.map(d => x(d[0].t)));
+    console.log(uniqScreenTimePoints);
+    let drawedPoints = d3.select("#timePoints").selectAll("line").data(uniqScreenTimePoints);    
+    drawedPoints
+      .enter()
+      .append("line")
+      .merge(drawedPoints)
+      .attr("x1", (d) => (d))
+      .attr("x2", (d) => (d))
+      .attr("y1", this.height)
+      .attr("y2", 0)
+      .attr("stroke-width", 1)
+      .attr("stroke", "red")
+    ;
+    drawedPoints.exit().remove();
     
-    for (let i = 0; i < variateCount; i ++) {
-      drawPatternSelection(verticalPatternSets.map(function(element) {
-        let elem = element[i];
-        elem["rankX"] = elem.startIndex * width / dataLength;
-        elem["rankWidth"] = (elem.endIndex - elem.startIndex) * width / dataLength;
-        return elem;
-      }), i);
-    }
+    // draw user selections
+    let userSelectedArea = d3.select("#userSelectedArea").selectAll("rect").data([__this.previousSelection.map(d => x(d))]);
+    userSelectedArea
+      .enter()
+      .append("rect")
+      .merge(userSelectedArea)
+      .attr("width", (d) => (d[1] - d[0]))
+      .attr("height", this.height)
+      .attr("x", (d) => d[0])
+      .attr("y", 0)
+      .attr("fill", "grey")
+      .attr("fill-opacity", "0.5")
+    ;
+    userSelectedArea.exit().remove();
+    
 
-    __this.timeRankResult = verticalPatternSets.map(d => d[0].t);
-    console.log(__this.timeRankResult);
-    function drawPatternSelection(selectionList, i) {
-      console.log("draw", i, selectionList);
-
-      let rankSelection = d3.select("#lineBrushes" + i).selectAll(".rankSelection").data(selectionList);
-console.log(rankSelection);
-      rankSelection
-        .enter()
-        .append("rect")
-        .merge(rankSelection)
-        .attr("class", "rankSelection")
-        .attr("fill", "pink")
-        .attr("fill-opacity", "0.05")
-        .attr("stroke", "pink")
-        // .attr("x", (d) => (d.rankX))
-        .attr("x", function(d) { return d.rankX;})
-        .attr("y", 0)
-        .attr("width", (d) => (d.rankWidth))
-        .attr("height", height);
-
-      rankSelection.exit().remove();
-    }
-
+    // draw pattern selections
+    __this.drawSearchedPatterns();
+    
     function getVerticalPatternSet(allVariateDistanceList, rankCount, w2) {
       let timeSlotLength = allVariateDistanceList[0].length;
 
@@ -461,7 +540,6 @@ console.log(rankSelection);
             })
           );
         }
-        // console.log(variateIndex, list.length, totalDistanceByTimeSlot);
         return totalDistanceByTimeSlot;
       });
       console.log("variateDistancesByTimeSlot", variateDistancesByTimeSlot);
@@ -510,6 +588,21 @@ console.log(rankSelection);
     }
   }
 
+
+
+
+
+
+
+
+
+
+
+
+
+  ///////////////////
+  // DTW
+  ///////////////////
   public calDTW(list, start, end) {
     if (list === null) return;
 
