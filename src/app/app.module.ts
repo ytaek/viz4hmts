@@ -6,17 +6,21 @@ import { MainComponent } from './main/main.component';
 import { MatSliderModule } from '@angular/material/slider';
 import { FormsModule } from '@angular/forms';
 import 'hammerjs/hammer';
+import { Phase2Component } from './phase2/phase2.component';
+import { AppRouterModule } from './app.router.module';
 
 @NgModule({
   declarations: [
     AppComponent,
-    MainComponent
+    MainComponent,
+    Phase2Component
   ],
   imports: [
     HttpModule,
     BrowserModule,
     MatSliderModule,
-    FormsModule
+    FormsModule,
+    AppRouterModule
   ],
   providers: [],
   bootstrap: [AppComponent]

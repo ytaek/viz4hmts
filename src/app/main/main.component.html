@@ -1,3 +1,31 @@
-<p>
-  main works!
-</p>
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<body>
+    <h1>&nbsp;&nbsp;Vertical Pattern Seacher</h1>
+    <table class="table">
+        <tr>
+            <td width="10"></td>
+            <td>
+                <div id="lines"></div>
+                <div id="selects"></div>
+                <div id="focusAndContext"></div>
+            </td>
+            <td width="400" valign="top">
+                <div id="ranks"></div>
+            </td>
+        </tr>
+    </table>
+    &nbsp;&nbsp;
+    <b>time distance weight: {{w2Value}}</b>
+    <mat-slider thumbLabel min="0" max="10" tickInterval="1"
+        class="example-margin"
+        [(ngModel)]="w2Value" (change)="w2Change($event.value)">
+    </mat-slider>
+    <b># of Rank Set: {{rankCount}}</b>
+    <mat-slider thumbLabel min="1" max="500"
+        class="example-margin"
+        [(ngModel)]="rankCount" (change)="rankCountChange($event.value)">
+    </mat-slider>
+    &nbsp;&nbsp;{{timeRankResult}}
+</body>
