@@ -4,6 +4,8 @@ import { HttpModule } from '@angular/http';
 import { AppComponent } from './app.component';
 import { MainComponent } from './main/main.component';
 import { MatSliderModule } from '@angular/material/slider';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FormsModule } from '@angular/forms';
 import 'hammerjs/hammer';
 import { Phase2Component } from './phase2/phase2.component';
@@ -20,7 +22,9 @@ import { AppRouterModule } from './app.router.module';
     BrowserModule,
     MatSliderModule,
     FormsModule,
-    AppRouterModule
+    AppRouterModule,
+    MatButtonModule,
+    MatCheckboxModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

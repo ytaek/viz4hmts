@@ -1,7 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { Http } from '@angular/http';
 import * as d3 from 'd3';
+import * as _ from 'underscore';
+import { DTW } from 'dtw';
 import { BuiltinType } from '@angular/compiler';
+import { isDefaultChangeDetectionStrategy } from '@angular/core/src/change_detection/constants';
 
 @Component({
   selector: 'app-phase2',
@@ -14,15 +17,26 @@ export class Phase2Component implements OnInit {
   margin = { top: 0, right: 0, bottom: 0, left: 0 };
   width = this.maxWidth - this.margin.left - this.margin.right;
   height = this.maxHeight - this.margin.top - this.margin.bottom;
+  contextHeight = 50;
   previousSelections: any;
-  lineBrushList = [];
   lineBrush;
+  
+  timeUnitSecond = 0;
   lineSelectionList = [];
+  isLineSelectedForVerticalSearchList = [];
+  horizontalSeachResultList = [];
 
+  public stride = 20;
   public focusX: any;
   public contextX: any;
-  public channelCount: Number;
-  public dataLength: Number;
+  public channelCount: number;
+  public dataLength: number;
+  public showHorizontalSearchCount = 20;
+  public searchTimeRelaxationMs = 5000;
+  public showHorizontalSearchPercent = 10;
+  public isKeepOrdering = false;
+  public showTopVerticalPattenCount = 300;
+  public resultCandidateCountPerWindow = 2;
 
   constructor(private http: Http) {
     let dataCsv = "./assets/data/eeg.5x.150s.csv"; 
@@ -40,7 +54,6 @@ export class Phase2Component implements OnInit {
     let width = this.width;
     let height = this.height;
 
-    let lineBrushList = [];
     let searchResultList = [];
 
     let x = d3.scaleLinear().range([0, this.width]);
@@ -54,10 +67,12 @@ export class Phase2Component implements OnInit {
       .entries(data);
     // Compute the maximum price per symbol, needed for the y-domain.
     symbols.forEach(function (s) {
-      s.maxPrice = d3.max(s.values, function (d) { return d.price; });
-      s.minPrice = d3.min(s.values, function (d) { return d.price; });
+      // s.maxPrice = d3.max(s.values, function (d) { return d.price; });
+      // s.minPrice = d3.min(s.values, function (d) { return d.price; });
       searchResultList.push(null);
       this.lineSelectionList.push(null);
+      this.horizontalSeachResultList.push(null);
+      this.isLineSelectedForVerticalSearchList.push(false);
     }, this);
     
     // Compute the minimum and maximum date across symbols.
@@ -70,6 +85,7 @@ export class Phase2Component implements OnInit {
     this.channelCount = symbols.length;
     this.dataLength = symbols[0].values.length;
     this.contextX = x;
+    this.timeUnitSecond = symbols[0].values[1].date - symbols[0].values[0].date;
 
     ////////////////////////////////////////
     // DRAW time series lines
@@ -124,7 +140,9 @@ export class Phase2Component implements OnInit {
       .attr("id", (d, i) => "lineBrushes" + i)
       .call(lineBrush)
     ;
-    svg.append("g").attr("id", (d, i) => ("lineBrushButtonArea" + i)).attr("visibility", "hidden");
+    svg.append("g").attr("id", (d, i) => `lineBrushButtonArea${i}`).attr("visibility", "hidden");
+    svg.append("g").attr("id", (d, i) => `hrzResultArea${i}`)
+    svg.append("g").attr("id", (d, i) => `verticalResultArea${i}`)
 
     ////////////////////////////////////////
     // DRAW focus area
@@ -135,7 +153,7 @@ export class Phase2Component implements OnInit {
       left: 0
     },
     widthb = this.maxWidth - marginb.left - marginb.right,
-    heightb = 50 - marginb.top - marginb.bottom;
+    heightb = 30 - marginb.top - marginb.bottom;
 
     var svg = d3.select("#focus").append("svg")
       .attr("width", widthb + marginb.left + marginb.right)
@@ -148,7 +166,6 @@ export class Phase2Component implements OnInit {
       .attr("width", widthb)
       .attr("height", heightb);
 
-
     svg.append("g")
       .attr("id", "focusXAxis")
       .call(d3.axisBottom(x).tickFormat(d3.format("")))
@@ -158,6 +175,7 @@ export class Phase2Component implements OnInit {
         .attr("dy", ".15em")
         .attr("transform", "rotate(-65)");
 
+  
     ////////////////////////////////////////
     // DRAW focus brush
     d3.select("#focus").select("svg").append("g").attr("id", "contextTimePoints");
@@ -173,7 +191,7 @@ export class Phase2Component implements OnInit {
 
     ////////////////////////////////////////
     // DRAW context area
-    let contextHeight = height;
+    let contextHeight = this.contextHeight;
     let contextSvg = d3.select("#context").append("svg")
       .attr("width", widthb + marginb.left + marginb.right)
       .attr("height", contextHeight)
@@ -233,8 +251,8 @@ export class Phase2Component implements OnInit {
       d3.select(this).select("path")
         .attr("class", "line")
         .attr("d", function (d) {
-          let sliceRanger = d3.scaleLinear().range([0, dataLength]).domain([0, d3.max(d.values, function (d) { return d.date; })]);
-          let sliced = d.values.slice(sliceRanger(start), sliceRanger(end));
+          let sliceScale = d3.scaleLinear().range([0, dataLength]).domain([0, d3.max(d.values, function (d) { return d.date; })]);
+          let sliced = d.values.slice(sliceScale(start), sliceScale(end));
           fy.domain([d3.min(sliced, function (d) { return d.price; }), d3.max(sliced, function (d) { return d.price; })]);
           return cline(d.values); })
         ;
@@ -253,6 +271,12 @@ export class Phase2Component implements OnInit {
             __this.lineSelectionList[i].map(d => __this.focusX(d)));
         }
       })
+    ;
+
+    // REDRAW Horizontal Search Result
+    __this.horizontalSeachResultList
+      .filter(d => d !== null)
+      .forEach((d, i) => __this.drawHorizontalSearchResults(i))
     ;
 
     // IF SearchedPattern exists.
@@ -279,12 +303,20 @@ export class Phase2Component implements OnInit {
   public drawLineBrushButtons(__this: any, selection: any, i: any) {
     let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (i));
     if (lineBrushButtonArea.select(".findButton").empty()) {
-      lineBrushButtonArea.append("text").attr("class", "findButton");
       lineBrushButtonArea.append("text").attr("class", "verticalSpan");
+      lineBrushButtonArea.append("text").attr("class", "findButton");
     }
     
-    let butX = d3.event.selection[1]- 7;
+    let butX = selection[1]- 7;
     let butY = __this.height - 5
+
+    lineBrushButtonArea.select(".verticalSpan")
+      .style("text-anchor", "end")
+      .attr("x", selection[1]-10)
+      .attr("y", __this.height - 8)
+      .text("↕")
+      .on("click", () => __this.verticalSpan(__this, i, selection));
+      ;
 
     lineBrushButtonArea.select(".findButton")
       .style("text-anchor", "end")
@@ -292,15 +324,7 @@ export class Phase2Component implements OnInit {
       .attr("x", butX)
       .attr("y", butY)
       .text("⚲")
-      .on("click", () => __this.findHorizontal());
-      ;
-
-    lineBrushButtonArea.select(".verticalSpan")
-      .style("text-anchor", "end")
-      .attr("x", d3.event.selection[1]-10)
-      .attr("y", __this.height - 8)
-      .text("↕")
-      .on("click", () => __this.verticalSpan(__this, i, selection));
+      .on("click", () => __this.findHorizontal(__this, i, __this.focusX.invert(selection[0]), __this.focusX.invert(selection[1])));
       ;
 
     let brush = d3.select("#lineBrushes" + i).select(".selection");
@@ -309,53 +333,361 @@ export class Phase2Component implements OnInit {
     lineBrushButtonArea.on("mouseover", () => lineBrushButtonArea.attr("visibility", ""));
 
     __this.lineSelectionList[i] = selection.map(d => __this.focusX.invert(d));
+    __this.isLineSelectedForVerticalSearchList[i] = true;
   }
 
-  // public overLineBrush(__this: any, i: Number) {
-  //   console.log("lineBrushed", d3.event.selection);
-
-  //   let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (i));
-  //   if (lineBrushButtonArea.select(".findButton").empty()) {
-  //     lineBrushButtonArea.append("text").attr("class", "findButton");
-  //     lineBrushButtonArea.append("text").attr("class", "verticalSpan");
-  //   }
-    
-  //   let butX = d3.event.selection[1]- 7;
-  //   let butY = __this.height - 5
-
-  //   lineBrushButtonArea.select(".findButton")
-  //     .style("text-anchor", "end")
-  //     .attr("transform", "rotate(26 " + (butX) + "," +  butY + ")")
-  //     .attr("x", butX)
-  //     .attr("y", butY)
-  //     .text("⚲")
-  //     .on("click", () => __this.findHorizontal());
-  //     ;
-
-  //   let selection = d3.event.selection;
-  //   lineBrushButtonArea.select(".verticalSpan")
-  //     .style("text-anchor", "end")
-  //     .attr("x", d3.event.selection[1]-10)
-  //     .attr("y", __this.height - 8)
-  //     .text("↕")
-  //     .on("click", () => __this.verticalSpan(__this, i, selection));
-  //     ;
-    
-  // }
-
-  public verticalSpan(__this:any, chIndex: Number, selection: any) {
+  public verticalSpan(__this:any, chIndex: number, selection: any) {
     d3.selectAll(".lineBrush").call(this.lineBrush.move, selection);
 
     selection = selection.map(d => __this.focusX.invert(d));
-    for (let i; i<__this.channelCount; i++)
+    for (let i; i<__this.channelCount; i++) {
       __this.lineSelectionList[i] = selection;
+      __this.isLineSelectedForVerticalSearchList[i] = true;
+    }
   }
 
-  public findHorizontal() {
 
-  }
+  public drawHorizontalSearchResults(chIndex: number) {
+    console.log("drawHorizontalSearchResults")
     
+    let resultList = this.horizontalSeachResultList[chIndex];
+    d3.select(`#hrzResultArea${chIndex}`).selectAll(".hrzResult").remove();
+    if (resultList === null) return;
+
+    let hrzResult = d3.select(`#hrzResultArea${chIndex}`).selectAll(".hrzResult").data(resultList);
+
+    hrzResult
+      .enter()
+      .append("rect")
+      .filter(d => this.focusX(d.x + d.width) >= 0)
+      .merge(hrzResult)
+      .attr("class", "hrzResult")
+      .attr("fill", "blue")
+      .attr("fill-opacity", "0.001")
+      .attr("stroke", "blue")
+      .attr("x", (d) => this.focusX(d.x))
+      .attr("y", 0)
+      .attr("width", (d) => this.focusX(d.x + d.width) - this.focusX(d.x))
+      .attr("height", this.height);
+
+    hrzResult.exit().remove();
+  }
+
+  public verticalSearch() {
+    // draw results
+    let verticalPatternSets = this.findVerticalPatterns();
+    let horizontalPatternSetList = _.range(this.channelCount).map(i => verticalPatternSets.map(d => d[i]));
+    console.log(verticalPatternSets, horizontalPatternSetList);
+
+    horizontalPatternSetList.forEach( function (set, chIndex) {
+      if (set[0] === null) return;
+      console.log(set);
+      let rankSelection = d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").data(set);
+      rankSelection
+        .enter()
+        .append("rect")
+        .merge(rankSelection)
+        .attr("class", "rankSelection")
+        .attr("fill", "pink")
+        .attr("fill-opacity", "0.05")
+        .attr("stroke", "pink")
+        .attr("x", (d) => this.focusX(d.x))
+        .attr("y", 0)
+        .attr("width", (d) => this.focusX(d.x + d.width) - this.focusX(d.x))
+        .attr("height", this.height);
+      
+      rankSelection.exit().remove();
+    }, this);
+  }
+
+
+
+
+
   ngOnInit() {
   }
 
+
+  //////////////////////////////////////////////////////////
+  // CALCULATIONS
+  //////////////////////////////////////////////////////////
+
+
+
+  public findVerticalPatterns() {
+    let resultLists = [];
+    let selectionIndexes = [];
+
+    for(let i = 0; i < this.channelCount; i++) resultLists.push(null);
+
+    // calculate each channel horizontally.
+    this.lineSelectionList.forEach( function(selection, chIndex) {
+      if (this.isLineSelectedForVerticalSearchList[chIndex] !== true) return;
+
+      let startTimeValue = this.round(selection[0], this.timeUnitSecond);
+      let endTimeValue = this.round(selection[1], this.timeUnitSecond);
+      let startIndex = parseInt( (startTimeValue / this.timeUnitSecond) + "");
+      let endIndex = parseInt( (endTimeValue / this.timeUnitSecond) + "");
+
+      let fullResultList = this.calDTW(d3.select("#lineBrushes" + chIndex).data()[0].values.map(d => d.price), startIndex, endIndex, this.stride);
+      let rankScale = d3.scaleLinear().range([0, 50]).domain([0, fullResultList.length]);
+      let normalizedValueScale = d3.scaleLinear().range([0, 50]).domain(d3.extent(fullResultList, d => d.distance));
+
+      selectionIndexes.push([startIndex, endIndex]);
+      let resultList = fullResultList.sort((a, b) => (a.distance - b.distance))
+        .map(function (d, i) {
+          d["hZRank"] = i;
+          d["x"] = d.startIndex * this.timeUnitSecond;
+          d["width"] = (d.endIndex - d.startIndex) * this.timeUnitSecond;
+          d["hZRankScore"] = rankScale(i);
+          d["normValScore"] = normalizedValueScale(d.distance);
+          d["score"] = d.hZRankScore + d.normValScore;
+          return d;
+        }, this)
+        .sort((a, b) => (a.startIndex - b.startIndex))
+      ;
+      
+      console.log(chIndex, resultList);
+      resultLists[chIndex] = resultList;
+    }, this); // selectionList loop
+
+    // summation channel score by time
+    // resultLists.
+    return this.findVerticalTopPatternsWithFullResultList(resultLists, selectionIndexes);
+  }
+
+  private findVerticalTopPatternsWithFullResultList(resultLists: any, selectionIndexes: any) {
+    console.log(this.lineSelectionList);
+
+    let validChCnt = selectionIndexes.filter(d => d !== null).length;
+
+    // find Top20
+    let topCnt = this.showTopVerticalPattenCount;
+    let topVerticalPairs = [];
+
+    class verticalPair {
+      pairs: Array<any>;
+      sum: number;
+      
+      constructor() {
+        this.pairs = [];
+        this.sum = 0;
+      }
+    }
+
+    let searchRelaxationUnit = Math.ceil(this.searchTimeRelaxationMs / 1000 / this.timeUnitSecond / this.stride);
+    let minStartIndex = d3.min(selectionIndexes.filter(d => d !== null), (d) => d[0]);
+    let dataLength = this.dataLength;
+    let iterationPointsByChannel = [];
+    let iterationPoints = _.range(0, dataLength, this.stride);
+    let endInterationPoint = iterationPoints.length - 1;
+    
+    this.lineSelectionList.forEach( function(selection, chIndex) {
+      if (selection === null) {
+        iterationPointsByChannel.push(null);
+        return;
+      }
+
+      let selIndex = selectionIndexes[chIndex];
+      let selWidth = selIndex[1] - selIndex[0];
+      let lgap = selIndex[0] - minStartIndex; 
+
+      iterationPointsByChannel.push(iterationPoints.map(function(timePoint) {
+        let relaxation = lgap + searchRelaxationUnit;
+        let searchRange = [
+          Math.max(0, timePoint - relaxation), 
+          Math.min(timePoint + selWidth + relaxation, dataLength)
+        ];
+        
+        // searchRange should be wider than one side relaxation
+        if (searchRange[1] - searchRange[0] >= selWidth + relaxation) return searchRange;
+        else return null;
+      }).filter(d => d !== null));
+
+      endInterationPoint = Math.min(endInterationPoint, iterationPointsByChannel[chIndex].length - 1);
+    }, this);
+  
+    console.log(iterationPoints, endInterationPoint, iterationPointsByChannel)
+
+
+    for (let step = 0; step < endInterationPoint; step++) {
+console.log("step", step);
+      let isSkip = false;
+      let resultQueueList = [];
+
+      resultLists.forEach( function(result, chIndex) {
+        if (iterationPointsByChannel[chIndex] === null || isSkip) { 
+          resultQueueList.push(null);
+          return;
+        }
+        let searchRange = iterationPointsByChannel[chIndex][step];
+        let subList = result.filter(d => d.startIndex >= searchRange[0] && d.startIndex < searchRange[1]);
+        if (subList.length === 0) isSkip = true;
+        // console.log("subList", searchRange, subList);
+
+        subList.sort( (a, b) => (a.distance - b.distance));
+        resultQueueList.push(subList);
+      }); //resultLists loop
+
+      if (isSkip) continue;
+
+      // console.log("resultQueueList", resultQueueList);
+      // resultQueueList.filter(d => d !== null).sort( (a, b) => (a.distance - b.distance) );
+      console.log("resultQueueList", resultQueueList);
+
+      // extract TOP 20 pairs
+      for (let i = 0; i < topCnt; i++) {
+        console.log(resultQueueList, resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0), validChCnt);
+        // check not enough set
+        if (resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0) < validChCnt) {
+          break;
+        }
+
+        let pair = new verticalPair();
+        let nextMinChIndex = -1;
+        [pair, nextMinChIndex,] = resultQueueList.reduce( function(prev, list, chIndex) {
+          if (list === null) {
+            prev[0].pairs.push(null);
+            return prev;
+          }
+
+          let diff = (list.length >= 2 ? list[1].distance - list[0].distance : Number.MAX_VALUE);
+          if (prev[2] > diff) {
+            prev[1] = chIndex;
+            prev[2] = diff;
+          }
+          
+          prev[0].sum += list[0].distance;
+          prev[0].pairs.push(list[0]);
+          return prev;
+        }, [pair, -1, Number.MAX_VALUE]);
+
+        // check only one pair exists
+        if (nextMinChIndex != -1) resultQueueList[nextMinChIndex].splice(0,1);
+        else resultQueueList.forEach(d => d = []);
+        
+        // compare to top pairs
+        topVerticalPairs.push(pair);
+        topVerticalPairs.sort((a, b) => (a.sum - b.sum));
+
+        if (topVerticalPairs.length > topCnt) {
+          let deleted = topVerticalPairs.splice(topCnt, 1)[0];
+          if (deleted === pair) {console.log("early break!!"); break; }
+        }
+      } // topCnt loop
+
+console.log(topVerticalPairs)
+      // break;
+    }
+
+
+    // 해당 iterationpoint에서 rank 2~5개만 뽑고
+    // -> 그 중에서 500개를 하는게 나을 듯.
+
+
+
+
+
+
+
+
+
+    return topVerticalPairs.map(d => d.pairs);
+  }
+
+
+  public findHorizontal(__this: any, chIndex: number, startTimeValue: number, endTimeValue: number) {
+    startTimeValue = __this.round(startTimeValue, __this.timeUnitSecond);
+    endTimeValue = __this.round(endTimeValue, __this.timeUnitSecond);
+
+    let startIndex = parseInt( (startTimeValue / __this.timeUnitSecond) + "");
+    let endIndex = parseInt( (endTimeValue / __this.timeUnitSecond) + "");
+
+    console.log("find horizontal patterns => ", [startTimeValue, endTimeValue], [startIndex, endIndex], __this.timeUnitSecond, __this.dataLength);
+    
+    // FIND TOPs
+    let fullResultList = __this.calDTW(d3.select("#lineBrushes" + chIndex).data()[0].values.map(d => d.price), startIndex, endIndex, __this.stride);
+    let rankScale = d3.scaleLinear().range([0, 50]).domain([0, fullResultList.length]);
+    let normalizedValueScale = d3.scaleLinear().range([0, 50]).domain(d3.extent(fullResultList, d => d.distance));
+
+    let resultList = fullResultList.sort((a, b) => (a.distance - b.distance))
+      // .filter(function(d, i) {
+      //   d.hZRank = i;
+      //   return i < __this.showHorizontalSearchCount;
+      // })
+      .map(function (d, i) {
+        d["hZRank"] = i;
+        d["x"] = d.startIndex * __this.timeUnitSecond;
+        d["width"] = (d.endIndex - d.startIndex) * __this.timeUnitSecond;
+        d["hZRankScore"] = rankScale(i);
+        d["normValScore"] = normalizedValueScale(d.distance);
+        d["score"] = d.hZRankScore + d.normValScore;
+        return d;
+      })
+      .filter(function(d, i) {
+          // return d.score < __this.showHorizontalSearchCount;
+          // return d.score < 1;
+          return d.hZRankScore < __this.showHorizontalSearchPercent && d.normValScore < __this.showHorizontalSearchPercent;
+        })
+      ;
+    // console.log(fullResultList);
+    console.log(resultList);
+    
+    __this.horizontalSeachResultList[chIndex] = resultList;
+    __this.drawHorizontalSearchResults(chIndex);
+  }
+
+  private round(value: number, unit: number) {
+    let residual = value % unit;
+    if (residual > unit / 2) return value - residual + unit;
+    else return value - residual;;
+  }
+
+  ///////////////////
+  // DTW
+  ///////////////////
+  public calDTW(list, start, end, stride = 1) {
+    if (list === null) return;
+
+    let dataPoints = [];
+    dataPoints = list.filter(function (d, i) {
+      return i >= start && i <= end;
+    });
+
+    let DTW = require('dtw');
+    let dtw = new DTW();
+
+    let comparisonWidth = dataPoints.length + 0;
+    let iterationPoints = list.map((d, i) => i)
+      .filter(index => index % stride == 0)
+      .filter(index => index < list.length - comparisonWidth)
+      .filter(index => !(index > start - comparisonWidth && index <= end + comparisonWidth));
+
+    let resultList = iterationPoints.map(function (i) {
+      let compTargetPoints = list.slice(i, i + comparisonWidth);
+      
+      // z normalization: y-offset shifting
+      let znormedCompTargetPoints = zNormalize(compTargetPoints);
+      let znormedDataPoints = zNormalize(dataPoints);
+
+      // let distance = dtw.compute(znormedDataPoints, znormedCompTargetPoints);
+      let distance = dtw.compute(dataPoints, compTargetPoints);
+      var path = dtw.path();
+
+      return { 
+        distance: distance, 
+        startIndex: i, 
+        endIndex: i + comparisonWidth, 
+        // path: path,
+      };
+    });
+
+    // return resultList.filter((d, i) => (i < listSize)).filter(d => d.distance != 0);
+    return resultList;
+
+    function zNormalize(arr) {
+      let mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      return arr.map(d => d - mean);
+    }
+  }
 }

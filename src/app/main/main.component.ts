@@ -32,7 +32,7 @@ export class MainComponent implements OnInit, OnDestroy {
   focusEndIndex = 0;
   userSelectedAreaStartIndex = 0;
   userSelectedAreaEndIndex = 0;
-
+  timeUnit = 0.02;
   public rankingMethod = "pearson";
   public w2Value = 2;
   public rankCount = 50;
@@ -399,6 +399,12 @@ export class MainComponent implements OnInit, OnDestroy {
     contextTimePoints.exit().remove();
   }
 
+  private round(value: number, unit: number) {
+    let residual = value % unit;
+    if (residual > unit / 2) return value - residual + unit;
+    else return value - residual;;
+  }
+
   public brushed(__this: any): void {
     let searchResultList = [];
     let dataLength = 0;
@@ -423,6 +429,11 @@ export class MainComponent implements OnInit, OnDestroy {
     start = Math.round(fx.invert(screenSelection[0]));
     end = Math.round(fx.invert(screenSelection[1]));
     __this.previousSelection = [start, end];
+console.log(screenSelection, start, end)
+    let startTimeValue = this.round(screenSelection[0], this.timeUnit);
+    let endTimeValue = this.round(screenSelection[1], this.timeUnit);
+    let startIndex = parseInt( (startTimeValue / this.timeUnit) + "");
+    let endIndex = parseInt( (endTimeValue / this.timeUnit) + "");
 
     ///////////////////////////////////
     // for all line charts
@@ -431,7 +442,7 @@ export class MainComponent implements OnInit, OnDestroy {
       .each(function (brushObject, i) {
         d3.select(this).call(d3.brushX().move, screenSelection);
         
-        let fullResultList = __this.calDTW(d3.select(this).data()[0].values.map(d => d.price), start, end, 3);
+        let fullResultList = __this.calDTW(d3.select(this).data()[0].values.map(d => d.price), startIndex, endIndex, 10);
         let resultList = fullResultList
           .sort((a, b) => (a.distance - b.distance))
           .filter(function(d, i) {
@@ -635,7 +646,7 @@ export class MainComponent implements OnInit, OnDestroy {
   ///////////////////
   public calDTW(list, start, end, stride = 1) {
     if (list === null) return;
-
+console.log(list, start, end)
     let dataPoints = [];
     dataPoints = list.filter(function (d, i) {
       return i >= start && i <= end;
@@ -656,7 +667,7 @@ export class MainComponent implements OnInit, OnDestroy {
       // z normalization: y-offset shifting
       let znormedCompTargetPoints = zNormalize(compTargetPoints);
       let znormedDataPoints = zNormalize(dataPoints);
-
+console.log(dataPoints, compTargetPoints);
       let distance = dtw.compute(dataPoints, compTargetPoints);
       var path = dtw.path();
 
