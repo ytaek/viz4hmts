@@ -25,6 +25,7 @@ export class Phase2Component implements OnInit {
   lineSelectionList = [];
   isLineSelectedForVerticalSearchList = [];
   horizontalSeachResultList = [];
+  verticalPatternSets = [];
 
   public stride = 20;
   public focusX: any;
@@ -35,7 +36,7 @@ export class Phase2Component implements OnInit {
   public searchTimeRelaxationMs = 5000;
   public showHorizontalSearchPercent = 10;
   public isKeepOrdering = false;
-  public showTopVerticalPattenCount = 300;
+  public showTopVerticalPattenCount = 50;
   public resultCandidateCountPerWindow = 2;
 
   constructor(private http: Http) {
@@ -279,6 +280,9 @@ export class Phase2Component implements OnInit {
       .forEach((d, i) => __this.drawHorizontalSearchResults(i))
     ;
 
+    // REDRAW verticalPatternSets
+    if (this.verticalPatternSets.length > 0) this.drawVerticalPatternSets(this.verticalPatternSets);
+
     // IF SearchedPattern exists.
     if (__this.previousSelection !== undefined) {
 
@@ -375,19 +379,24 @@ export class Phase2Component implements OnInit {
 
   public verticalSearch() {
     // draw results
-    let verticalPatternSets = this.findVerticalPatterns();
+    this.verticalPatternSets = this.findVerticalPatterns();
+    this.drawVerticalPatternSets(this.verticalPatternSets);
+  }
+
+  public drawVerticalPatternSets(verticalPatternSets: any) {
     let horizontalPatternSetList = _.range(this.channelCount).map(i => verticalPatternSets.map(d => d[i]));
     console.log(verticalPatternSets, horizontalPatternSetList);
 
     horizontalPatternSetList.forEach( function (set, chIndex) {
       if (set[0] === null) return;
       console.log(set);
-      let rankSelection = d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").data(set);
-      rankSelection
+      d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").remove();
+      let patterns = d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").data(set);
+      patterns
         .enter()
         .append("rect")
-        .merge(rankSelection)
-        .attr("class", "rankSelection")
+        .merge(patterns)
+        .attr("class", "verticalPattern")
         .attr("fill", "pink")
         .attr("fill-opacity", "0.05")
         .attr("stroke", "pink")
@@ -396,12 +405,9 @@ export class Phase2Component implements OnInit {
         .attr("width", (d) => this.focusX(d.x + d.width) - this.focusX(d.x))
         .attr("height", this.height);
       
-      rankSelection.exit().remove();
+      patterns.exit().remove();
     }, this);
   }
-
-
-
 
 
   ngOnInit() {
@@ -411,8 +417,6 @@ export class Phase2Component implements OnInit {
   //////////////////////////////////////////////////////////
   // CALCULATIONS
   //////////////////////////////////////////////////////////
-
-
 
   public findVerticalPatterns() {
     let resultLists = [];
@@ -509,18 +513,22 @@ export class Phase2Component implements OnInit {
   
     console.log(iterationPoints, endInterationPoint, iterationPointsByChannel)
 
-
-    for (let step = 0; step < endInterationPoint; step++) {
-console.log("step", step);
+    let minCut = Number.MAX_VALUE;
+    for (let window = 0; window < endInterationPoint; window++) {
+console.log("window#", window);
+      // set min cut
+      if (topVerticalPairs.length >= this.showTopVerticalPattenCount) {
+        minCut = topVerticalPairs[this.showTopVerticalPattenCount - 1];
+      }
       let isSkip = false;
       let resultQueueList = [];
-
+      
       resultLists.forEach( function(result, chIndex) {
         if (iterationPointsByChannel[chIndex] === null || isSkip) { 
           resultQueueList.push(null);
           return;
         }
-        let searchRange = iterationPointsByChannel[chIndex][step];
+        let searchRange = iterationPointsByChannel[chIndex][window];
         let subList = result.filter(d => d.startIndex >= searchRange[0] && d.startIndex < searchRange[1]);
         if (subList.length === 0) isSkip = true;
         // console.log("subList", searchRange, subList);
@@ -530,19 +538,17 @@ console.log("step", step);
       }); //resultLists loop
 
       if (isSkip) continue;
-
-      // console.log("resultQueueList", resultQueueList);
-      // resultQueueList.filter(d => d !== null).sort( (a, b) => (a.distance - b.distance) );
       console.log("resultQueueList", resultQueueList);
 
-      // extract TOP 20 pairs
-      for (let i = 0; i < topCnt; i++) {
-        console.log(resultQueueList, resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0), validChCnt);
+      let topPairsPerWindow = [];
+      // extract TOP pairs from window
+      for (let i = 0; i < this.resultCandidateCountPerWindow; i++) {
+        // console.log(resultQueueList, resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0), validChCnt);
         // check not enough set
         if (resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0) < validChCnt) {
           break;
         }
-
+        
         let pair = new verticalPair();
         let nextMinChIndex = -1;
         [pair, nextMinChIndex,] = resultQueueList.reduce( function(prev, list, chIndex) {
@@ -562,36 +568,28 @@ console.log("step", step);
           return prev;
         }, [pair, -1, Number.MAX_VALUE]);
 
-        // check only one pair exists
-        if (nextMinChIndex != -1) resultQueueList[nextMinChIndex].splice(0,1);
-        else resultQueueList.forEach(d => d = []);
-        
-        // compare to top pairs
-        topVerticalPairs.push(pair);
-        topVerticalPairs.sort((a, b) => (a.sum - b.sum));
+        // check sum is below topPairsLastLength;
+        if (minCut < pair.sum) break;
 
-        if (topVerticalPairs.length > topCnt) {
-          let deleted = topVerticalPairs.splice(topCnt, 1)[0];
-          if (deleted === pair) {console.log("early break!!"); break; }
-        }
+        // check only one pair exists
+        if (nextMinChIndex != -1) {
+          resultQueueList[nextMinChIndex].splice(0,1);
+          topPairsPerWindow.push(pair);
+        } else resultQueueList.forEach(d => d = []);
       } // topCnt loop
 
-console.log(topVerticalPairs)
-      // break;
+      if (topPairsPerWindow.length <= 0) break;
+console.log("topPairsPerWindow", topPairsPerWindow)
+      topPairsPerWindow.map(d => topVerticalPairs.push(d));
+      topVerticalPairs.sort((a, b) => (a.sum - b.sum));
+console.log("topVerticalPairs", topVerticalPairs)
+      // trim
+      topVerticalPairs.splice(topCnt, topPairsPerWindow.length);
     }
 
 
     // 해당 iterationpoint에서 rank 2~5개만 뽑고
     // -> 그 중에서 500개를 하는게 나을 듯.
-
-
-
-
-
-
-
-
-
     return topVerticalPairs.map(d => d.pairs);
   }
 
