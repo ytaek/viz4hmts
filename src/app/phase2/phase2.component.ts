@@ -241,7 +241,7 @@ export class Phase2Component implements OnInit {
     let start = this.contextX.invert(d3.event.selection[0]);
     let end = this.contextX.invert(d3.event.selection[1]);
     fx.domain([start, end])
-    console.log(d3.event.selection, start, end);
+// console.log(d3.event.selection, start, end);
 
     // REDRAW CONTEXT
     let cline = d3.line()
@@ -385,17 +385,18 @@ export class Phase2Component implements OnInit {
 
   public drawVerticalPatternSets(verticalPatternSets: any) {
     let horizontalPatternSetList = _.range(this.channelCount).map(i => verticalPatternSets.map(d => d[i]));
-    console.log(verticalPatternSets, horizontalPatternSetList);
+    // console.log(verticalPatternSets, horizontalPatternSetList);
 
     horizontalPatternSetList.forEach( function (set, chIndex) {
       if (set[0] === null) return;
-      console.log(set);
+
       d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").remove();
       let patterns = d3.select(`#verticalResultArea${chIndex}`).selectAll(".verticalPattern").data(set);
       patterns
         .enter()
         .append("rect")
         .merge(patterns)
+        .attr("id", (d, i) => `pair${i}`)
         .attr("class", "verticalPattern")
         .attr("fill", "pink")
         .attr("fill-opacity", "0.05")
@@ -403,10 +404,37 @@ export class Phase2Component implements OnInit {
         .attr("x", (d) => this.focusX(d.x))
         .attr("y", 0)
         .attr("width", (d) => this.focusX(d.x + d.width) - this.focusX(d.x))
-        .attr("height", this.height);
+        .attr("height", this.height)
+        .on("mouseover", (d, i) => overSet(true, i))
+        ;
       
       patterns.exit().remove();
     }, this);
+
+    // when over, draw new rects for selected pair
+    function overSet(over: boolean, setIndex: number) {
+      if (!over) {
+        d3.selectAll(".hightlightPair").remove();
+        return;
+      }
+      let patternSet = d3.selectAll(`#pair${setIndex}`);
+
+      patternSet.each(function(d, chIndex) {
+        let node = d3.select(this);
+        d3.select(this.parentNode)
+          .append("rect")
+          .attr("id", (d, i) => `pair${i}`)
+          .attr("class", "hightlightPair")
+          .attr("stroke", "red")
+          .attr("stroke-width", "2")
+          .attr("fill", "transparent")
+          .attr("x", node.attr("x"))
+          .attr("y", 0)
+          .attr("width", node.attr("width"))
+          .attr("height", node.attr("height"))
+          .on("mouseleave", (d, i) => overSet(false, chIndex))
+      });
+    }
   }
 
 
@@ -461,7 +489,7 @@ export class Phase2Component implements OnInit {
   }
 
   private findVerticalTopPatternsWithFullResultList(resultLists: any, selectionIndexes: any) {
-    console.log(this.lineSelectionList);
+    console.log("lineSelectionList", this.lineSelectionList);
 
     let validChCnt = selectionIndexes.filter(d => d !== null).length;
 
@@ -478,6 +506,14 @@ export class Phase2Component implements OnInit {
         this.sum = 0;
       }
     }
+    
+    // reduce[chIndex, startIndex]
+    let orderedStartIndexList = selectionIndexes.reduce(function(prev, cur, chIndex) {
+      if (cur === null) return prev;
+      prev.push([chIndex, cur[0]]);
+      return prev;
+    }, []).sort((a, b) => (a[1] - b[1])).map(d => d[0]);
+// console.log("orderedStartIndexList", orderedStartIndexList);
 
     let searchRelaxationUnit = Math.ceil(this.searchTimeRelaxationMs / 1000 / this.timeUnitSecond / this.stride);
     let minStartIndex = d3.min(selectionIndexes.filter(d => d !== null), (d) => d[0]);
@@ -485,6 +521,7 @@ export class Phase2Component implements OnInit {
     let iterationPointsByChannel = [];
     let iterationPoints = _.range(0, dataLength, this.stride);
     let endInterationPoint = iterationPoints.length - 1;
+    
     
     this.lineSelectionList.forEach( function(selection, chIndex) {
       if (selection === null) {
@@ -511,11 +548,11 @@ export class Phase2Component implements OnInit {
       endInterationPoint = Math.min(endInterationPoint, iterationPointsByChannel[chIndex].length - 1);
     }, this);
   
-    console.log(iterationPoints, endInterationPoint, iterationPointsByChannel)
+    // console.log(iterationPoints, endInterationPoint, iterationPointsByChannel)
 
     let minCut = Number.MAX_VALUE;
     for (let window = 0; window < endInterationPoint; window++) {
-console.log("window#", window);
+// console.log("window#", window);
       // set min cut
       if (topVerticalPairs.length >= this.showTopVerticalPattenCount) {
         minCut = topVerticalPairs[this.showTopVerticalPattenCount - 1];
@@ -538,11 +575,11 @@ console.log("window#", window);
       }); //resultLists loop
 
       if (isSkip) continue;
-      console.log("resultQueueList", resultQueueList);
+      // console.log("resultQueueList", resultQueueList);
 
       let topPairsPerWindow = [];
       // extract TOP pairs from window
-      for (let i = 0; i < this.resultCandidateCountPerWindow; i++) {
+      while (topPairsPerWindow.length < this.resultCandidateCountPerWindow) {
         // console.log(resultQueueList, resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0), validChCnt);
         // check not enough set
         if (resultQueueList.filter(d => d !== null).reduce((prev, cur) => prev += cur.length, 0) < validChCnt) {
@@ -568,23 +605,47 @@ console.log("window#", window);
           return prev;
         }, [pair, -1, Number.MAX_VALUE]);
 
+        // keep ordering
+        let same = true;
+        if (this.isKeepOrdering) {
+          let orderedIndex = pair.pairs.reduce(function(prev, cur, chIndex) {
+            if (cur === null) return prev;
+            prev.push([chIndex, cur.startIndex]);
+            return prev;
+          }, []).sort((a, b) => (a[1] - b[1])).map(d => d[0]);
+
+          for (let i = 0; i < orderedStartIndexList.length; i++) {
+            if (orderedStartIndexList[i] !== orderedIndex[i]) {
+              same = false;
+              break;
+            }
+          }
+// console.log("cmp", orderedStartIndexList, orderedIndex, same);
+        }
+
         // check sum is below topPairsLastLength;
         if (minCut < pair.sum) break;
 
-        // check only one pair exists
-        if (nextMinChIndex != -1) {
-          resultQueueList[nextMinChIndex].splice(0,1);
-          topPairsPerWindow.push(pair);
-        } else resultQueueList.forEach(d => d = []);
+        if (same) topPairsPerWindow.push(pair);
+        if (nextMinChIndex === -1) break;
+        resultQueueList[nextMinChIndex].splice(0,1);
+
+//         // check only one pair exists
+//         if (nextMinChIndex != -1) {
+//           resultQueueList[nextMinChIndex].splice(0,1);
+//           if (same) topPairsPerWindow.push(pair);
+//         } else resultQueueList.forEach(d => d = []);
+
+// console.log("topPairsPerWindow", topPairsPerWindow)
       } // topCnt loop
 
-      if (topPairsPerWindow.length <= 0) break;
-console.log("topPairsPerWindow", topPairsPerWindow)
-      topPairsPerWindow.map(d => topVerticalPairs.push(d));
-      topVerticalPairs.sort((a, b) => (a.sum - b.sum));
-console.log("topVerticalPairs", topVerticalPairs)
-      // trim
-      topVerticalPairs.splice(topCnt, topPairsPerWindow.length);
+      if (topPairsPerWindow.length > 0) {
+        topPairsPerWindow.map(d => topVerticalPairs.push(d));
+        topVerticalPairs.sort((a, b) => (a.sum - b.sum));
+// console.log("topVerticalPairs", topVerticalPairs)
+        // trim
+        topVerticalPairs.splice(topCnt, topPairsPerWindow.length);
+      }
     }
 
 
