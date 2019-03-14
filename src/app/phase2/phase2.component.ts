@@ -5,6 +5,7 @@ import * as _ from 'underscore';
 import { DTW } from 'dtw';
 import { BuiltinType } from '@angular/compiler';
 import { isDefaultChangeDetectionStrategy } from '@angular/core/src/change_detection/constants';
+import { async } from '@angular/core/testing';
 
 @Component({
   selector: 'app-phase2',
@@ -38,6 +39,7 @@ export class Phase2Component implements OnInit {
   public isKeepOrdering = false;
   public showTopVerticalPattenCount = 50;
   public resultCandidateCountPerWindow = 2;
+  
 
   constructor(private http: Http) {
     let dataCsv = "./assets/data/eeg.5x.150s.csv"; 
@@ -128,9 +130,38 @@ export class Phase2Component implements OnInit {
 
     ////////////////////////////////////////
     // DRAW line brushes
-    let lineBrush = d3.brushX().on("end", function(d, i) {
+    let lineBrush = d3.brushX().on("end", function(d) {
       let id = d3.select(this).attr("id");
-      let chIndex = id.substring("lineBrushes".length, id.length);
+      let chIndex = +id.substring("lineBrushes".length, id.length);
+
+      // if (d3.event.selection === null) {
+      //   console.log("null seelection", i);
+      //   __this.removeSelection(__this, null);
+      //   return;
+      // }
+
+      // toggle selection
+      let prevSelection = (__this.lineSelectionList[chIndex] !== null ? __this.lineSelectionList[chIndex].map(d=>+d) : null);
+      let curSelection = d3.event.selection.map(d => +__this.focusX.invert(d));
+console.log("brush end call", __this.isLineSelectedForVerticalSearchList[chIndex], prevSelection, curSelection,  )
+      if (prevSelection === null || 
+          (prevSelection !== null
+            && curSelection[0] === prevSelection[0] 
+            && curSelection[1] === prevSelection[1])) {
+console.log(__this.isLineSelectedForVerticalSearchList[chIndex])
+        // toggle
+        if (__this.isLineSelectedForVerticalSearchList[chIndex]) __this.isLineSelectedForVerticalSearchList[chIndex] = false;
+        else __this.isLineSelectedForVerticalSearchList[chIndex] = true;
+        console.log(__this.isLineSelectedForVerticalSearchList[chIndex])
+        __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+        console.log("res = ",__this.isLineSelectedForVerticalSearchList[chIndex])
+      }
+      if (prevSelection === null) {
+
+        __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+      }
+      // __this.lineSelectionList[chIndex] = curSelection;
+      // __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
       return __this.drawLineBrushButtons(__this, d3.event.selection, chIndex);
     });
 
@@ -227,7 +258,33 @@ export class Phase2Component implements OnInit {
       .call(contextBrush.move, [150, 1200]);
   }
   
+  // public removeSelection(__this: any, chIndex: number) {
+  //   d3.select("#lineBrushes" + chIndex).call(__this.lineBrush.move, null);
+  // }
 
+  public redrawToggleSelection(__this: any, chIndex: number, clicked: boolean) {
+console.log("redrawToggleSelection", clicked);
+
+    let fill = ["green", "black"];
+    let opacity = ["0.3", "0.1"];
+    let stroke = ["green", "black"];
+    let dashArray = ["", "5,5"];
+
+    let rect = d3.select("#lineBrushes" + chIndex).select(".selection");
+    if (clicked) {
+      rect
+        .attr("fill", "green")
+        .attr("fill-opacity", "0.3")
+        .attr("stroke", "green")
+        .attr("stroke-dasharray", "");
+    } else {
+      rect
+        .attr("fill", "black")
+        .attr("fill-opacity", "0.1")
+        .attr("stroke", "black")
+        .attr("stroke-dasharray", "5,5");
+    }
+  }
 
   public contextBrushed(__this: any): void {
     let width = __this.width;
@@ -269,7 +326,7 @@ export class Phase2Component implements OnInit {
       .each(function (brushObject, i) {
         if (__this.lineSelectionList[i] !== null) {
           d3.select(this).call(__this.lineBrush.move, 
-            __this.lineSelectionList[i].map(d => __this.focusX(d)));
+            __this.lineSelectionList[i].map(d => +__this.focusX(d)));
         }
       })
     ;
@@ -304,13 +361,13 @@ export class Phase2Component implements OnInit {
 
   }
 
-  public drawLineBrushButtons(__this: any, selection: any, i: any) {
+  public drawLineBrushButtons(__this: any, selection: any, i: number) {
     let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (i));
     if (lineBrushButtonArea.select(".findButton").empty()) {
       lineBrushButtonArea.append("text").attr("class", "verticalSpan");
       lineBrushButtonArea.append("text").attr("class", "findButton");
     }
-    
+
     let butX = selection[1]- 7;
     let butY = __this.height - 5
 
@@ -336,18 +393,96 @@ export class Phase2Component implements OnInit {
     brush.on("mouseleave", () => lineBrushButtonArea.attr("visibility", "hidden"));
     lineBrushButtonArea.on("mouseover", () => lineBrushButtonArea.attr("visibility", ""));
 
-    __this.lineSelectionList[i] = selection.map(d => __this.focusX.invert(d));
-    __this.isLineSelectedForVerticalSearchList[i] = true;
+    __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
+    // __this.isLineSelectedForVerticalSearchList[i] = true;
   }
 
   public verticalSpan(__this:any, chIndex: number, selection: any) {
-    d3.selectAll(".lineBrush").call(this.lineBrush.move, selection);
 
-    selection = selection.map(d => __this.focusX.invert(d));
-    for (let i; i<__this.channelCount; i++) {
-      __this.lineSelectionList[i] = selection;
+    d3.selectAll(".lineBrush")
+        .filter((d, i) => i !== chIndex)
+        .call(__this.lineBrush.move, selection);
+    
+    for (let i = 0; i < __this.channelCount; i++) {
+      // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
       __this.isLineSelectedForVerticalSearchList[i] = true;
+      console.log("vs toggle", i, __this.isLineSelectedForVerticalSearchList[i]);
+      __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[i]);
     }
+        
+    // do nothing when selection is not changed
+    // let prevSelection = __this.lineSelectionList[chIndex].map(d=>+d);
+    // let curSelection = selection.map(d => +__this.focusX.invert(d));
+
+    // if (prevSelection[0] === curSelection[0] && prevSelection[1] === curSelection[1]) {
+    //   console.log("selection is not changed");
+    //   return;
+    // }
+
+    // for (let i = 0; i < __this.channelCount; i++) {
+    //   // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
+    //   // __this.isLineSelectedForVerticalSearchList[i] = true;
+    //   // __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+    // }
+
+    // let promise = new Promise((resolve, reject) => {
+    //   d3.selectAll(".lineBrush")
+    //     .filter((d, i) => i !== chIndex)
+    //     .call(this.lineBrush.move, selection);
+    //   resolve();
+    // });
+
+    // promise.then((d) => console.log
+    
+    // function reBrush(__this:any) {
+    //   return new Promise( (resolve, reject) => {
+    //   d3.selectAll(".lineBrush")
+    //     .filter((d, i) => i !== chIndex)
+    //     .call(__this.lineBrush.move, selection)
+    //     .each(function(d, i) {
+    //       __this.isLineSelectedForVerticalSearchList[i] = true;
+    //       __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
+    //     });
+
+    //   setTimeout(() => console.log("asdf"), 3000);
+      
+    //   resolve();
+    //   });
+    // }
+
+
+    // async function reBrush(__this:any) {
+    //   await d3.selectAll(".lineBrush")
+    //   .filter((d, i) => i !== chIndex)
+    //   .call(__this.lineBrush.move, selection);
+
+    //   await setTimeout(() => console.log("asdf"), 3000);
+    //   console.log()
+    // }
+
+    // reBrush(__this).then( () => {
+    //   for (let i = 0; i < __this.channelCount; i++) {
+    //     // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
+    //     __this.isLineSelectedForVerticalSearchList[i] = true;
+    //     console.log("vs toggle", i);
+    //     __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
+    //   }
+    // });
+
+
+
+
+    // d3.selectAll(".lineBrush")
+    //   .filter((d, i) => i !== chIndex)
+    //   .call(this.lineBrush.move, selection);
+
+
+    // for (let i = 0; i < __this.channelCount; i++) {
+    //   // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
+    //   __this.isLineSelectedForVerticalSearchList[i] = true;
+    //   console.log("vs toggle", i);
+    //   __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
+    // }
   }
 
 
@@ -378,8 +513,10 @@ export class Phase2Component implements OnInit {
   }
 
   public verticalSearch() {
-    // draw results
     this.verticalPatternSets = this.findVerticalPatterns();
+    // clear
+    d3.selectAll(".verticalPattern").remove();
+    // draw results
     this.drawVerticalPatternSets(this.verticalPatternSets);
   }
 
@@ -454,8 +591,10 @@ export class Phase2Component implements OnInit {
 
     // calculate each channel horizontally.
     this.lineSelectionList.forEach( function(selection, chIndex) {
-      if (this.isLineSelectedForVerticalSearchList[chIndex] !== true) return;
-
+      if (this.isLineSelectedForVerticalSearchList[chIndex] !== true) {
+        selectionIndexes.push(null);
+        return;
+      }
       let startTimeValue = this.round(selection[0], this.timeUnitSecond);
       let endTimeValue = this.round(selection[1], this.timeUnitSecond);
       let startIndex = parseInt( (startTimeValue / this.timeUnitSecond) + "");
@@ -524,10 +663,12 @@ export class Phase2Component implements OnInit {
     
     
     this.lineSelectionList.forEach( function(selection, chIndex) {
-      if (selection === null) {
+      console.log(chIndex, this.isLineSelectedForVerticalSearchList, selectionIndexes);
+      if (selection === null || !this.isLineSelectedForVerticalSearchList[chIndex]) {
         iterationPointsByChannel.push(null);
         return;
       }
+      console.log(chIndex, "hehe", selectionIndexes[chIndex]);
 
       let selIndex = selectionIndexes[chIndex];
       let selWidth = selIndex[1] - selIndex[0];
