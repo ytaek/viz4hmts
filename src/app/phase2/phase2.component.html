@@ -6,10 +6,14 @@
     <table class="table">
         <tr>
             <td></td>
-            <td align="right">
-                <mat-checkbox [(ngModel)]="isKeepOrdering">Keep Ordering</mat-checkbox>
-                    &nbsp;
-                <button mat-stroked-button color="accent" (click)="verticalSearch()">Vertical Search</button>
+            <td align=right>
+                <div style="display:inline-block;">
+                    <mat-checkbox [(ngModel)]="isKeepOrdering">Keep Ordering</mat-checkbox>
+                </div>
+                <div style="display:inline-block;width:10px"></div>
+                <div style="display:inline-block;">
+                    <button mat-stroked-button color="accent" (click)="verticalSearch()">Vertical Search</button>
+                </div>
             </td>
             <td></td>
         </tr>
@@ -26,24 +30,39 @@
         </tr>
         <tr>
             <td></td>
-            <td align="right">
-                <mat-checkbox [(ngModel)]="isKeepOrdering">Keep Ordering</mat-checkbox>
-                &nbsp;
-                <button mat-stroked-button color="accent" (click)="verticalSearch()">Vertical Search</button>
+            <td align="right" style="vertical-align: top">
+                <div style="width:180px;display:inline-block;" align="center">
+                    <b>HZ Search Result Top: {{showHorizontalSearchPercent}}%</b>
+                    <mat-slider thumbLabel min="1" max="20" class="example-margin" [(ngModel)]="showHorizontalSearchPercent"></mat-slider>
+                </div>
+                <div style="width:180px;display:inline-block;" align="center">
+                    <b>Vertical Search Stride: &nbsp;&nbsp;{{stride}}</b>
+                    <mat-slider thumbLabel min="1" max="50" class="example-margin" [(ngModel)]="stride"></mat-slider>
+                </div>
+                <div style="width:180px;display:inline-block;" align="center">
+                    <b>Window Relaxation(ms): {{searchTimeRelaxationMs}}</b>
+                    <mat-slider thumbLabel min="1" max="40000" class="example-margin" [(ngModel)]="searchTimeRelaxationMs"></mat-slider>
+                </div>
+                <div style="width:180px;display:inline-block;" align="center">
+                    <b>Vertical Search Top #: {{showTopVerticalPattenCount}}</b>
+                    <mat-slider thumbLabel min="1" max="200" class="example-margin" [(ngModel)]="showTopVerticalPattenCount"></mat-slider>
+                </div>
+                <div style="width:180px;display:inline-block;" align="center">
+                    <b>Result # per window: {{resultCandidateCountPerWindow}}</b>
+                    <mat-slider thumbLabel min="1" max="10" class="example-margin" [(ngModel)]="resultCandidateCountPerWindow"></mat-slider>
+                </div>
+                <div style="display:inline-block;width:10px"></div>
+                <div style="display:inline-block;vertical-align: top">
+                    <mat-checkbox [(ngModel)]="isKeepOrdering">Keep Ordering</mat-checkbox>
+                </div>
+                <div style="display:inline-block;width:10px"></div>
+                <div style="display:inline-block;vertical-align: top">
+                    <button mat-stroked-button color="accent" (click)="verticalSearch()">Vertical Search</button>
+                </div>
             </td>
             <td></td>
         </tr>
     </table>
-    &nbsp;&nbsp;
-    <!-- <b>time distance weight: {{w2Value}}</b>
-    <mat-slider thumbLabel min="0" max="10" tickInterval="1" class="example-margin" [(ngModel)]="w2Value" (change)="w2Change($event.value)">
-    </mat-slider>
-    <b># of Rank Set: {{rankCount}}</b>
-    <mat-slider thumbLabel min="1" max="500" class="example-margin" [(ngModel)]="rankCount" (change)="rankCountChange($event.value)">
-    </mat-slider> -->
-    <b>HZ Search Result Top: {{showHorizontalSearchPercent}}</b>
-    <mat-slider thumbLabel min="1" max="20" class="example-margin" [(ngModel)]="showHorizontalSearchPercent" >
-    </mat-slider>%
-    &nbsp;&nbsp;{{timeRankResult}}
+
     
 </body>

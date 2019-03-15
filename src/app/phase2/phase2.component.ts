@@ -2,10 +2,11 @@ import { Component, OnInit } from '@angular/core';
 import { Http } from '@angular/http';
 import * as d3 from 'd3';
 import * as _ from 'underscore';
-import { DTW } from 'dtw';
+//import { DTW } from 'dtw';
 import { BuiltinType } from '@angular/compiler';
 import { isDefaultChangeDetectionStrategy } from '@angular/core/src/change_detection/constants';
 import { async } from '@angular/core/testing';
+import * as DTW from 'dtw';
 
 @Component({
   selector: 'app-phase2',
@@ -35,7 +36,7 @@ export class Phase2Component implements OnInit {
   public dataLength: number;
   public showHorizontalSearchCount = 20;
   public searchTimeRelaxationMs = 5000;
-  public showHorizontalSearchPercent = 10;
+  public showHorizontalSearchPercent = 5;
   public isKeepOrdering = false;
   public showTopVerticalPattenCount = 50;
   public resultCandidateCountPerWindow = 2;
@@ -134,39 +135,18 @@ export class Phase2Component implements OnInit {
       let id = d3.select(this).attr("id");
       let chIndex = +id.substring("lineBrushes".length, id.length);
 
-      // if (d3.event.selection === null) {
-      //   console.log("null seelection", i);
-      //   __this.removeSelection(__this, null);
-      //   return;
-      // }
-
-      // toggle selection
+      // when selection changed, clear horizontal search result
       let prevSelection = (__this.lineSelectionList[chIndex] !== null ? __this.lineSelectionList[chIndex].map(d=>+d) : null);
-      let curSelection = d3.event.selection.map(d => +__this.focusX.invert(d));
-console.log("brush end call", __this.isLineSelectedForVerticalSearchList[chIndex], prevSelection, curSelection,  )
-      if (prevSelection === null || 
-          (prevSelection !== null
-            && curSelection[0] === prevSelection[0] 
-            && curSelection[1] === prevSelection[1])) {
-console.log(__this.isLineSelectedForVerticalSearchList[chIndex])
-        // toggle
-        if (__this.isLineSelectedForVerticalSearchList[chIndex]) __this.isLineSelectedForVerticalSearchList[chIndex] = false;
-        else __this.isLineSelectedForVerticalSearchList[chIndex] = true;
-        console.log(__this.isLineSelectedForVerticalSearchList[chIndex])
-        __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
-        console.log("res = ",__this.isLineSelectedForVerticalSearchList[chIndex])
-      }
-      if (prevSelection === null) {
+      
 
-        __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
-      }
-      // __this.lineSelectionList[chIndex] = curSelection;
-      // __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+      // init
+      if (__this.lineSelectionList[chIndex] === null) __this.isLineSelectedForVerticalSearchList[chIndex] = true;
+      __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+      
       return __this.drawLineBrushButtons(__this, d3.event.selection, chIndex);
     });
-
     this.lineBrush = lineBrush;
-    // this.lineBrush = lineBrush;
+
     var gBrushes = svg.append('g');
     gBrushes.attr("class", "lineBrush")
       .attr("id", (d, i) => "lineBrushes" + i)
@@ -258,10 +238,6 @@ console.log(__this.isLineSelectedForVerticalSearchList[chIndex])
       .call(contextBrush.move, [150, 1200]);
   }
   
-  // public removeSelection(__this: any, chIndex: number) {
-  //   d3.select("#lineBrushes" + chIndex).call(__this.lineBrush.move, null);
-  // }
-
   public redrawToggleSelection(__this: any, chIndex: number, clicked: boolean) {
 console.log("redrawToggleSelection", clicked);
 
@@ -333,25 +309,25 @@ console.log("redrawToggleSelection", clicked);
 
     // REDRAW Horizontal Search Result
     __this.horizontalSeachResultList
-      .filter(d => d !== null)
-      .forEach((d, i) => __this.drawHorizontalSearchResults(i))
-    ;
+      .forEach((d, i) => {
+        if (d !== null) __this.drawHorizontalSearchResults(i)
+      });
 
     // REDRAW verticalPatternSets
     if (this.verticalPatternSets.length > 0) this.drawVerticalPatternSets(this.verticalPatternSets);
 
-    // IF SearchedPattern exists.
-    if (__this.previousSelection !== undefined) {
+    // // IF SearchedPattern exists.
+    // if (__this.previousSelection !== undefined) {
 
-      // REDRAW SELECTIONS
-      __this.drawSearchedPatterns();
+    //   // REDRAW SELECTIONS
+    //   __this.drawSearchedPatterns();
 
-      // Move selections
-      d3.select("#userSelectionArea").select(".selection")
-        .attr("x", fx(__this.previousSelection[0]))
-        .attr("width", fx(__this.previousSelection[1]) - fx(__this.previousSelection[0]))
-      ;
-    }
+    //   // Move selections
+    //   d3.select("#userSelectionArea").select(".selection")
+    //     .attr("x", fx(__this.previousSelection[0]))
+    //     .attr("width", fx(__this.previousSelection[1]) - fx(__this.previousSelection[0]))
+    //   ;
+    // }
   }
 
 
@@ -361,8 +337,8 @@ console.log("redrawToggleSelection", clicked);
 
   }
 
-  public drawLineBrushButtons(__this: any, selection: any, i: number) {
-    let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (i));
+  public drawLineBrushButtons(__this: any, selection: any, chIndex: number) {
+    let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (chIndex));
     if (lineBrushButtonArea.select(".findButton").empty()) {
       lineBrushButtonArea.append("text").attr("class", "verticalSpan");
       lineBrushButtonArea.append("text").attr("class", "findButton");
@@ -376,7 +352,7 @@ console.log("redrawToggleSelection", clicked);
       .attr("x", selection[1]-10)
       .attr("y", __this.height - 8)
       .text("↕")
-      .on("click", () => __this.verticalSpan(__this, i, selection));
+      .on("click", () => __this.verticalSpan(__this, chIndex, selection));
       ;
 
     lineBrushButtonArea.select(".findButton")
@@ -385,15 +361,21 @@ console.log("redrawToggleSelection", clicked);
       .attr("x", butX)
       .attr("y", butY)
       .text("⚲")
-      .on("click", () => __this.findHorizontal(__this, i, __this.focusX.invert(selection[0]), __this.focusX.invert(selection[1])));
+      .on("click", () => __this.findHorizontal(__this, chIndex, __this.focusX.invert(selection[0]), __this.focusX.invert(selection[1])));
       ;
 
-    let brush = d3.select("#lineBrushes" + i).select(".selection");
+    let brush = d3.select("#lineBrushes" + chIndex).select(".selection");
     brush.on("mouseover", () => lineBrushButtonArea.attr("visibility", ""));
     brush.on("mouseleave", () => lineBrushButtonArea.attr("visibility", "hidden"));
+    brush.on("mousedown", () => {
+      // toggling
+      if (__this.isLineSelectedForVerticalSearchList[chIndex]) __this.isLineSelectedForVerticalSearchList[chIndex] = false;
+      else __this.isLineSelectedForVerticalSearchList[chIndex] = true;
+      __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
+    });
     lineBrushButtonArea.on("mouseover", () => lineBrushButtonArea.attr("visibility", ""));
 
-    __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
+    __this.lineSelectionList[chIndex] = selection.map(d => +__this.focusX.invert(d));
     // __this.isLineSelectedForVerticalSearchList[i] = true;
   }
 
@@ -854,7 +836,6 @@ console.log("redrawToggleSelection", clicked);
       return i >= start && i <= end;
     });
 
-    let DTW = require('dtw');
     let dtw = new DTW();
 
     let comparisonWidth = dataPoints.length + 0;
