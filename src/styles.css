@@ -26,10 +26,10 @@ body {
     shape-rendering: crispEdges;
 }
 
-.brush .selection  {
+/* .brush, .selection  {
     stroke: #000;
     fill: red;
-}
+} */
 
 .rankDiv {
     color: #EEEEEE;
@@ -51,6 +51,16 @@ body {
     font-weight: bold;
 }
 
+.verticalPatternOnContext {
+    /* stroke: #000; */
+    fill: red;
+    fill-opacity: 0.01;
+}
+
+.selectionsOnContext {
+    fill: green;
+    fill-opacity: 0.1;
+}
 /* 
 .findButton .verticalSpan {
     

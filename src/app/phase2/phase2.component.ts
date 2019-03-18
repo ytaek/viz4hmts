@@ -7,6 +7,7 @@ import { BuiltinType } from '@angular/compiler';
 import { isDefaultChangeDetectionStrategy } from '@angular/core/src/change_detection/constants';
 import { async } from '@angular/core/testing';
 import * as DTW from 'dtw';
+import { range } from 'rxjs';
 
 @Component({
   selector: 'app-phase2',
@@ -138,12 +139,13 @@ export class Phase2Component implements OnInit {
       // when selection changed, clear horizontal search result
       let prevSelection = (__this.lineSelectionList[chIndex] !== null ? __this.lineSelectionList[chIndex].map(d=>+d) : null);
       
-
       // init
       if (__this.lineSelectionList[chIndex] === null) __this.isLineSelectedForVerticalSearchList[chIndex] = true;
       __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
       
-      return __this.drawLineBrushButtons(__this, d3.event.selection, chIndex);
+      __this.drawLineBrushButtons(__this, d3.event.selection, chIndex);
+      __this.drawSelectionsOnContext();
+      return;
     });
     this.lineBrush = lineBrush;
 
@@ -224,8 +226,8 @@ export class Phase2Component implements OnInit {
         .attr("transform", "rotate(-65)");
 
     // add time points g
-    d3.select("#focusAndContext").select("svg").append("g").attr("id", "timePoints");
-    d3.select("#focusAndContext").select("svg").append("g").attr("id", "userSelectedArea");
+    contextSvg.append("g").attr("id", "verticalSearchResultOnContext");
+    contextSvg.append("g").attr("id", "userSelectedArea");
 
     var contextBrush = d3.brushX()
       .extent([[0, 0], [width, contextHeight]])
@@ -239,8 +241,6 @@ export class Phase2Component implements OnInit {
   }
   
   public redrawToggleSelection(__this: any, chIndex: number, clicked: boolean) {
-console.log("redrawToggleSelection", clicked);
-
     let fill = ["green", "black"];
     let opacity = ["0.3", "0.1"];
     let stroke = ["green", "black"];
@@ -260,6 +260,42 @@ console.log("redrawToggleSelection", clicked);
         .attr("stroke", "black")
         .attr("stroke-dasharray", "5,5");
     }
+  }
+
+  public drawSelectionsOnContext(): void {
+    // DRAW ONE RANGE
+//     let x = d3.scaleLinear().range([0, this.width]).domain([0, this.dataLength]);
+
+//     let validSelections = this.lineSelectionList.filter(d => d !== null);
+//     let range = [d3.min(validSelections, d => d[0]), d3.max(validSelections, d => d[1])].map(d => this.contextX(d));
+// console.log(validSelections, range);
+//     d3.select("#verticalSearchResultOnContext").select(".selectionsOnContext").remove();
+//     d3.select("#verticalSearchResultOnContext")
+//       .append("rect")
+//       .attr("class", "selectionsOnContext")
+//       // .attr("stroke", "pink")
+//       .attr("x", range[0])
+//       .attr("y", 0)
+//       .attr("width", range[1] - range[0])
+//       .attr("height", this.contextHeight)
+//       ;
+    
+    // DRAW ALL SELECTIONS
+    d3.select("#verticalSearchResultOnContext").selectAll(".selectionsOnContext").remove();
+    let patterns = d3.select("#verticalSearchResultOnContext").selectAll(".selectionsOnContext")
+      .data(this.lineSelectionList.filter(d => d !== null));
+console.log(this.lineSelectionList.filter(d => d !== null))
+    patterns
+      .enter()
+      .append("rect")
+        .merge(patterns)
+        .attr("class", "selectionsOnContext")
+        .attr("x", d => this.contextX(d[0]))
+        .attr("y", 0)
+        .attr("width", d => this.contextX(d[1] - d[0]))
+        .attr("height", this.contextHeight)
+        ;
+      patterns.exit().remove();
   }
 
   public contextBrushed(__this: any): void {
@@ -338,6 +374,11 @@ console.log("redrawToggleSelection", clicked);
   }
 
   public drawLineBrushButtons(__this: any, selection: any, chIndex: number) {
+    if (selection === null) {
+      __this.lineSelectionList[chIndex] = null;
+      return;
+    }
+
     let lineBrushButtonArea = d3.select("#lineBrushButtonArea" + (chIndex));
     if (lineBrushButtonArea.select(".findButton").empty()) {
       lineBrushButtonArea.append("text").attr("class", "verticalSpan");
@@ -388,83 +429,8 @@ console.log("redrawToggleSelection", clicked);
     for (let i = 0; i < __this.channelCount; i++) {
       // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
       __this.isLineSelectedForVerticalSearchList[i] = true;
-      console.log("vs toggle", i, __this.isLineSelectedForVerticalSearchList[i]);
       __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[i]);
     }
-        
-    // do nothing when selection is not changed
-    // let prevSelection = __this.lineSelectionList[chIndex].map(d=>+d);
-    // let curSelection = selection.map(d => +__this.focusX.invert(d));
-
-    // if (prevSelection[0] === curSelection[0] && prevSelection[1] === curSelection[1]) {
-    //   console.log("selection is not changed");
-    //   return;
-    // }
-
-    // for (let i = 0; i < __this.channelCount; i++) {
-    //   // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
-    //   // __this.isLineSelectedForVerticalSearchList[i] = true;
-    //   // __this.redrawToggleSelection(__this, chIndex, __this.isLineSelectedForVerticalSearchList[chIndex]);
-    // }
-
-    // let promise = new Promise((resolve, reject) => {
-    //   d3.selectAll(".lineBrush")
-    //     .filter((d, i) => i !== chIndex)
-    //     .call(this.lineBrush.move, selection);
-    //   resolve();
-    // });
-
-    // promise.then((d) => console.log
-    
-    // function reBrush(__this:any) {
-    //   return new Promise( (resolve, reject) => {
-    //   d3.selectAll(".lineBrush")
-    //     .filter((d, i) => i !== chIndex)
-    //     .call(__this.lineBrush.move, selection)
-    //     .each(function(d, i) {
-    //       __this.isLineSelectedForVerticalSearchList[i] = true;
-    //       __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
-    //     });
-
-    //   setTimeout(() => console.log("asdf"), 3000);
-      
-    //   resolve();
-    //   });
-    // }
-
-
-    // async function reBrush(__this:any) {
-    //   await d3.selectAll(".lineBrush")
-    //   .filter((d, i) => i !== chIndex)
-    //   .call(__this.lineBrush.move, selection);
-
-    //   await setTimeout(() => console.log("asdf"), 3000);
-    //   console.log()
-    // }
-
-    // reBrush(__this).then( () => {
-    //   for (let i = 0; i < __this.channelCount; i++) {
-    //     // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
-    //     __this.isLineSelectedForVerticalSearchList[i] = true;
-    //     console.log("vs toggle", i);
-    //     __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
-    //   }
-    // });
-
-
-
-
-    // d3.selectAll(".lineBrush")
-    //   .filter((d, i) => i !== chIndex)
-    //   .call(this.lineBrush.move, selection);
-
-
-    // for (let i = 0; i < __this.channelCount; i++) {
-    //   // __this.lineSelectionList[i] = selection.map(d => +__this.focusX.invert(d));
-    //   __this.isLineSelectedForVerticalSearchList[i] = true;
-    //   console.log("vs toggle", i);
-    //   __this.redrawToggleSelection(__this, i, __this.isLineSelectedForVerticalSearchList[chIndex]);
-    // }
   }
 
 
@@ -500,6 +466,38 @@ console.log("redrawToggleSelection", clicked);
     d3.selectAll(".verticalPattern").remove();
     // draw results
     this.drawVerticalPatternSets(this.verticalPatternSets);
+    this.drawVerticalSearchResultOnContext(this.verticalPatternSets);
+  }
+
+  public drawVerticalSearchResultOnContext(verticalPatternSets: any) {
+    let x = d3.scaleLinear().range([0, this.width]).domain([0, this.dataLength]);
+    let contextRects = verticalPatternSets.map( (set) => {
+      set = set.filter(d => d !== null);
+  console.log("set = ", set);
+      let minStart = x(d3.min(set, (d => d.startIndex)));
+      let maxEnd = x(d3.max(set, (d => d.endIndex)));
+      // let maxEnd = x(d3.max(set, (d => d.startIndex + d.width)));
+      return [minStart, maxEnd-minStart];
+    });
+    console.log(contextRects, this.dataLength);
+    d3.select("#verticalSearchResultOnContext").selectAll(".verticalPatternOnContext").remove();
+    let patterns = d3.select("#verticalSearchResultOnContext").selectAll(".verticalPatternOnContext")
+      .data(contextRects);
+    patterns
+      .enter()
+      .append("rect")
+        .merge(patterns)
+        .attr("class", "verticalPatternOnContext")
+        .attr("fill", "pink")
+        .attr("fill-opacity", "0.05")
+        .attr("stroke", "pink")
+        .attr("x", d => d[0])
+        .attr("y", 0)
+        .attr("width", d => d[1])
+        .attr("height", this.contextHeight)
+        ;
+      patterns.exit().remove();
+      
   }
 
   public drawVerticalPatternSets(verticalPatternSets: any) {
