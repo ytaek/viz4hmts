@@ -17,6 +17,7 @@ import { range } from 'rxjs';
 export class Phase2Component implements OnInit {
   maxWidth = 1200;
   maxHeight = 80;
+  queryViewWidth = 100;
   margin = { top: 0, right: 0, bottom: 0, left: 0 };
   width = this.maxWidth - this.margin.left - this.margin.right;
   height = this.maxHeight - this.margin.top - this.margin.bottom;
@@ -99,6 +100,7 @@ export class Phase2Component implements OnInit {
       .data(symbols)
       .enter()
       .append("svg")
+      .attr("id", (d, i) => `lineSvg${i}`)
       .attr("width", width)
       .attr("height", height)
       .append("g")
@@ -145,6 +147,7 @@ export class Phase2Component implements OnInit {
       
       __this.drawLineBrushButtons(__this, d3.event.selection, chIndex);
       __this.drawSelectionsOnContext();
+      __this.drawQueries();
       return;
     });
     this.lineBrush = lineBrush;
@@ -238,6 +241,24 @@ export class Phase2Component implements OnInit {
       .call(contextBrush)
       // .call(contextBrush.move, x.range());
       .call(contextBrush.move, [150, 1200]);
+
+    /////////////////////////////////////
+    // add query view
+    let queryViewSvg = d3.select("#queryView").selectAll("svg")
+      .data(_.range(this.channelCount))
+      .enter()
+      .append("svg")
+      .attr("id", d => `queryLine${d}`)
+      .attr("width", this.queryViewWidth)
+      .attr("height", height)
+      .append("g")
+      .attr("class", "queryLine")
+      .attr("width", this.queryViewWidth)
+      .attr("height", height)
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+      ;
+    queryViewSvg.append("path")
+      .attr("class", "line");
   }
   
   public redrawToggleSelection(__this: any, chIndex: number, clicked: boolean) {
@@ -261,7 +282,66 @@ export class Phase2Component implements OnInit {
         .attr("stroke-dasharray", "5,5");
     }
   }
+  public drawQueries(): void {
+    let timeX = d3.scaleLinear().range([0, this.dataLength]).domain(this.contextX.domain());
+    let validSelections = this.lineSelectionList.filter(d => d !== null);
+    let timeDataRange = [d3.min(validSelections, d => d[0]), d3.max(validSelections, d => d[1])];
+    let dataRange = timeDataRange.map(d => Math.round(timeX(d)));
+    let qX = d3.scaleLinear().range([0, this.queryViewWidth]).domain(dataRange.map(d => timeX.invert(d) ));
+console.log(qX.domain());
 
+    this.lineSelectionList.forEach( (sel, chIndex) => {
+      let queryLine = d3.select(`#queryLine${chIndex}`);
+      if (sel === null) {
+        queryLine.select("path").attr("d", "");
+        return;
+      }
+      
+      let data = d3.select(`#lineSvg${chIndex}`).datum().values.slice(dataRange[0], dataRange[1]);
+      let qY = d3.scaleLinear().range([this.height, 0]).domain(d3.extent(data, d => d.price));
+      let cline = d3.line()
+        .x(function (d) { return qX(d.date); })
+        .y(function (d) { return qY(d.price); });
+console.log(chIndex, data[0], data[0].date, qX(data[0].date), qY(data[0].price));
+
+      // draw line
+      queryLine.select("path")
+        .attr("class", "line")
+        .attr("d", cline(data))
+        ;
+      
+      // draw selection
+      queryLine.select(".querySelection").remove();
+      queryLine.append("rect")
+        .attr("class", "querySelection")
+        .attr("x", qX(sel[0]))
+        .attr("y", 0)
+        .attr("width", qX(sel[1]) - qX(sel[0]))
+        .attr("height", this.height)
+      ;
+      
+      // svgs.each(function () {
+      //   d3.select(this).select("path")
+      //     .attr("class", "line")
+      //     .attr("d", function (d) {
+      //       let sliceScale = d3.scaleLinear().range([0, dataLength]).domain([0, d3.max(d.values, function (d) { return d.date; })]);
+      //       let sliced = d.values.slice(sliceScale(start), sliceScale(end));
+      //       fy.domain([d3.min(sliced, function (d) { return d.price; }), d3.max(sliced, function (d) { return d.price; })]);
+      //       return cline(d.values); })
+      //     ;
+      // });
+
+
+    });
+
+
+
+
+
+
+
+
+  }
   public drawSelectionsOnContext(): void {
     // DRAW ONE RANGE
 //     let x = d3.scaleLinear().range([0, this.width]).domain([0, this.dataLength]);
@@ -386,7 +466,7 @@ console.log(this.lineSelectionList.filter(d => d !== null))
     }
 
     let butX = selection[1]- 7;
-    let butY = __this.height - 5
+    let butY = __this.height - 5;
 
     lineBrushButtonArea.select(".verticalSpan")
       .style("text-anchor", "end")

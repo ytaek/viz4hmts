@@ -61,6 +61,11 @@ body {
     fill: green;
     fill-opacity: 0.1;
 }
+
+.querySelection {
+    fill: green;
+    fill-opacity: 0.1;
+}
 /* 
 .findButton .verticalSpan {
     
